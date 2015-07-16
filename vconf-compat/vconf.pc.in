@@ -6,5 +6,6 @@ includedir=@INCLUDE_INSTALL_DIR@/vconf
 Name: vconf
 Description: configuration system library
 Version: 0.3.1
+Requires.private: glib-2.0
 Libs: -L${libdir} -lvconf
 Cflags: -I${includedir}
