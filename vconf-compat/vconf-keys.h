@@ -19,6 +19,6 @@
 #ifndef __VCONF_KEYS_H__
 #define __VCONF_KEYS_H__
 
-#include <vconf-internal-keys.h>
+#include "vconf-internal-keys.h"
 
 #endif /* __VCONF_KEYS_H__ */
