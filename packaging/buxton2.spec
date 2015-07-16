@@ -68,6 +68,7 @@ Buxton wrapper library for providing vconf APIs
 %package -n vconf-compat-devel
 Summary:       buxton wrapper for vconf APIs (devel)
 Requires:      vconf-compat = %{version}-%{release}
+Requires:      vconf-internal-keys-devel
 BuildRequires: pkgconfig(vconf-internal-keys)
 Obsoletes:     vconf-buxton-devel
 Obsoletes:     vconf-buxton-keys-devel
