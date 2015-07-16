@@ -4,6 +4,7 @@ Requires=buxton2-pre.service
 After=buxton2-pre.service
 
 [Service]
+Environment=BUXTON_CYNARA_PERMISSIVE_MODE=1
 ExecStart=/usr/sbin/buxton2d -f
 User=buxton
 
