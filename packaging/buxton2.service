@@ -1,0 +1,11 @@
+[Unit]
+Description=Buxton2 Configuration Service
+Requires=buxton2-pre.service
+After=buxton2-pre.service
+
+[Service]
+ExecStart=/usr/sbin/buxton2d -f
+User=buxton
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,235 @@
+#!/bin/sh
+
+BUXTONTOOL=/usr/bin/buxton2ctl
+
+OPT_DIRECT=""
+OPT_TYPE=""
+OPT_RECUR=0
+OPT_INIT=""
+OPT_LABEL=""
+OPT_DEBUG=0
+
+usage() {
+	COMM=`basename $0`
+cat << EOF
+
+ Usage:
+   $COMM set [set-options] <key name> <value>
+   $COMM get [get-options] <key name>
+   $COMM unset <key name>
+
+ set-options:
+   -t, --type=int|bool|double|string   Type of key
+   -u, --uid=UID                       User ID (for compatibility, ignored)
+   -g, --gid=GID                       Gourp ID (for compatibility, ignored)
+   -i, --install                       Install memory type key
+   -s, --smack=LABEL                   Set a SMACK label
+   -f, --force                         Overwrite by force (for compatibility, ignored)
+
+   ex)
+     $COMM set -t string db/testapp/key1 "This is test"
+     $COMM set -t int -i memory/testapp/status -1
+
+ get-options:
+   -r, --recursive                     Retrieve all keys having the given prefix
+
+   ex)
+     $COMM get db/testapp/key1
+     $COMM get -r db/testapp
+
+EOF
+	exit 1
+}
+
+dbg() {
+	[ ${OPT_DEBUG} -eq 0 ] && return 0
+	echo "$*" >&2
+	return 0
+}
+
+get_layer() {
+	case "$1" in
+	memory*)
+		echo -n "memory"
+		;;
+	*)
+		echo -n "system"
+		;;
+	esac
+}
+
+get_key() {
+	[ -z "$1" ] && exit 1
+
+	LAYER=`get_layer $1`
+
+	dbg ${BUXTONTOOL} ${OPT_DIRECT} get ${LAYER} $1
+	RES=`${BUXTONTOOL} ${OPT_DIRECT} get ${LAYER} $1 2>&1`
+	[ $? -ne 0 ] && echo "Error: $RES" && exit 1
+	VAL=`echo "$RES" | sed 's/^.* = //g; s/\(.*\): \(.*\)$/\2 (\1)/g'`
+	echo "$1, value = $VAL"
+}
+
+do_get() {
+	[ -z "${OPT_KEY}" ] && echo "Invalid key name" && usage
+
+	if [ $OPT_RECUR -eq 0 ]; then
+		get_key ${OPT_KEY}
+		exit $?
+	fi
+
+	LAYER=`get_layer ${OPT_KEY}`
+
+	dbg ${BUXTONTOOL} ${OPT_DIRECT} list-keys ${LAYER} | grep ^${OPT_KEY}
+	LIST=`${BUXTONTOOL} ${OPT_DIRECT} list-keys ${LAYER} | grep ^${OPT_KEY}`
+	for k in $LIST; do
+		get_key $k
+	done
+}
+
+do_unset() {
+	[ -z "${OPT_KEY}" ] && echo "Invalid key name" && usage
+
+	LAYER=`get_layer ${OPT_KEY}`
+
+	dbg ${BUXTONTOOL} ${OPT_DIRECT} unset ${LAYER} ${OPT_KEY}
+	RES=`${BUXTONTOOL} ${OPT_DIRECT} unset ${LAYER} ${OPT_KEY} 2>&1`
+	[ $? -ne 0 ] && echo "Error: $RES" && exit 1
+	exit 0
+}
+
+get_type() {
+	case "$1" in
+	int)    echo -n "int32"  ;;
+	bool)   echo -n "bool"   ;;
+	double) echo -n "double" ;;
+	string) echo -n "string" ;;
+	*)      echo -n ""       ;;
+	esac
+}
+
+do_create() {
+	[ -z "${OPT_KEY}" ] && echo "Invalid key name" && usage
+
+	LAYER=`get_layer ${OPT_KEY}`
+	TYPE=`get_type ${OPT_TYPE}`
+	[ -z "${TYPE}" ] && echo "Type '${OPT_TYPE}': Invalid type" && usage
+
+	dbg ${BUXTONTOOL} ${OPT_DIRECT} create-${TYPE} \
+		${LAYER} ${OPT_KEY} \"${OPT_VAL}\" \"\" \"${OPT_LABEL}\"
+	RES=`${BUXTONTOOL} ${OPT_DIRECT} create-${TYPE} \
+		${LAYER} ${OPT_KEY} "${OPT_VAL}" "" "${OPT_LABEL}" 2>&1`
+	[ $? -ne 0 ] && echo "Error: $RES" && exit 1
+	exit 0
+}
+
+do_set() {
+	[ -z "${OPT_KEY}" ] && echo "Invalid key name" && usage
+
+	LAYER=`get_layer ${OPT_KEY}`
+	TYPE=`get_type ${OPT_TYPE}`
+	[ -z "${TYPE}" ] && echo "Type '${OPT_TYPE}': Invalid type" && usage
+
+	dbg ${BUXTONTOOL} ${OPT_DIRECT} ${OPT_INIT} set-${TYPE} \
+		${LAYER} ${OPT_KEY} \"${OPT_VAL}\"
+	RES=`${BUXTONTOOL} ${OPT_DIRECT} ${OPT_INIT} set-${TYPE} \
+		${LAYER} ${OPT_KEY} "${OPT_VAL}" 2>&1`
+	if [ $? -ne 0 ]; then
+		echo "$RES" | grep -q "No such file"
+		if [ $? -eq 0 ]; then
+			do_create
+			exit $?
+		fi
+
+		echo "Error: $RES"
+		exit 1
+	fi
+
+	[ -z "${OPT_LABEL}" ] && exit 0
+
+	dbg ${BUXTONTOOL} ${OPT_DIRECT} set-write-priv \
+		${LAYER} ${OPT_KEY} \"${OPT_LABEL}\"
+	RES=`${BUXTONTOOL} ${OPT_DIRECT} set-write-priv \
+		${LAYER} ${OPT_KEY} "${OPT_LABEL}" 2>&1 `
+	[ $? -ne 0 ] && echo "Error: $RES" && exit 1
+	exit 0
+}
+
+_getopt() {
+	eval set -- `
+		for x in "$@"; do
+			echo -n "'$x'" \
+				| sed -e "s/\(.\)'\(.\)/\\1\\\\'\\2/g" \
+				-e "s/^'\(-[0-9.]*\)'\$/'protect-sign:\1'/g" \
+				-e "s/$/ /g"
+		done
+	`
+
+	getopt -n `basename $0` \
+		-l type:,recursive,gid:,uid:,force,install,smack:,debug,verbose,quiet \
+		-o t:rg:u:fis:dvq -- "$@" \
+		| sed -e "s/'protect-sign:/'/g"
+}
+
+eval set -- `_getopt "$@"`
+
+while [ "$1" != "--" ]; do
+	case "$1" in
+	-t|--type)
+		OPT_TYPE="$2"
+		shift 2
+		;;
+	-r|--recursive)
+		OPT_RECUR=1
+		shift
+		;;
+	-g|--gid|-u|--uid)
+		# ignore
+		shift 2
+		;;
+	-f|--force|-v|--verbose|-q|--quiet)
+		# ignore
+		shift
+		;;
+	-i|--install)
+		OPT_INIT="-i"
+		shift
+		;;
+	-s|--smack)
+		OPT_LABEL="$2"
+		shift 2
+		;;
+	-d|--debug)
+		OPT_DEBUG=1
+		shift
+		;;
+	*)
+		echo "Invalid argument $1"
+		usage
+		;;
+	esac
+done
+
+shift
+OPT_CMD="$1"
+OPT_KEY="$2"
+OPT_VAL="$3"
+
+# check daemon status
+if [ ! -x ${BUXTONTOOL} ]; then
+	echo "${BUXTONTOOL} not exist" >&2
+	exit 1
+fi
+
+${BUXTONTOOL} check 2>&1 > /dev/null
+if [ $? -ne 0 ]; then
+	OPT_DIRECT="-d"
+fi
+
+case "$OPT_CMD" in
+get)   do_get ;;
+set)   do_set ;;
+unset) do_unset ;;
+*)     usage ;;
+esac
+
