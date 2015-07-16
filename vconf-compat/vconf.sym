@@ -11,9 +11,11 @@ VCONF_BUXTON_1.0 {
 		vconf_set_int;
 		vconf_set_bool;
 		vconf_set_str;
+		vconf_set_dbl;
 		vconf_get_int;
 		vconf_get_bool;
 		vconf_get_str;
+		vconf_get_dbl;
 	local:
 		*;
 };

@@ -164,6 +164,16 @@ int vconf_set_bool(const char *key, int boolval);
 int vconf_set_str(const char *key, const char *strval);
 
 /**
+ * Set a double-precision float value
+ *
+ * @param[in] key the name of key
+ * @param[in] dblval a double value
+ * @return 0 on success, -1 on error
+ * @deprecated use buxton APIs
+ */
+int vconf_set_dbl(const char *key, double dblval);
+
+/**
  * Get an integer value
  *
  * @param[in] key the name of key
@@ -191,6 +201,16 @@ int vconf_get_bool(const char *key, int *boolval);
  * @deprecated use buxton APIs
  */
 char *vconf_get_str(const char *key);
+
+/**
+ * Get a double-precision float value
+ *
+ * @param[in] key the name of key
+ * @param[out] dblval a pointer to a double value to be set
+ * @return 0 on success, -1 on error
+ * @deprecated use buxton APIs
+ */
+int vconf_get_dbl(const char *key, double *dblval);
 
 #ifdef __cplusplus
 }

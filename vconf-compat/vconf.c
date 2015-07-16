@@ -560,6 +560,27 @@ EXPORT int vconf_set_str(const char *key, const char *strval)
 	return r;
 }
 
+EXPORT int vconf_set_dbl(const char *key, double dblval)
+{
+	int r;
+	struct buxton_value *val;
+
+	if (!key) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	val = buxton_value_create_double(dblval);
+	if (!val)
+		return -1;
+
+	r = vconf_set(key, val);
+
+	buxton_value_free(val);
+
+	return r;
+}
+
 static int vconf_get(const char *key, enum buxton_key_type type,
 		struct buxton_value **val)
 {
@@ -676,5 +697,32 @@ EXPORT char *vconf_get_str(const char *key)
 	buxton_value_free(val);
 
 	return str;
+}
+
+EXPORT int vconf_get_dbl(const char *key, double *dblval)
+{
+	int r;
+	struct buxton_value *val;
+	double d;
+
+	if (!key || !dblval) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	r = vconf_get(key, BUXTON_TYPE_DOUBLE, &val);
+	if (r == -1)
+		return -1;
+
+	r = buxton_value_get_double(val, &d);
+
+	buxton_value_free(val);
+
+	if (r == -1)
+		return -1;
+
+	*dblval = d;
+
+	return 0;
 }
 
