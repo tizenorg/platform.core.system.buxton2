@@ -19,11 +19,18 @@
 #ifndef __VCONF_H__
 #define __VCONF_H__
 
+#include <errno.h>
+
 #include "vconf-keys.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define VCONF_OK 0
+#define VCONF_ERROR -1
+#define VCONF_ERROR_FILE_NO_ENT -ENOENT
+#define VCONF_ERROR_FILE_PERM -EPERM
 
 enum vconf_t {
 	VCONF_TYPE_NONE = 0, /**< Vconf none type for Error detection */
@@ -211,6 +218,14 @@ char *vconf_get_str(const char *key);
  * @deprecated use buxton APIs
  */
 int vconf_get_dbl(const char *key, double *dblval);
+
+/**
+ * Get an error code of the last API call
+ *
+ * @return error code
+ * @deprecated use buxton APIs
+ */
+int vconf_get_ext_errno(void);
 
 #ifdef __cplusplus
 }

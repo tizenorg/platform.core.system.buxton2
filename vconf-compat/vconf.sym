@@ -16,6 +16,7 @@ VCONF_BUXTON_1.0 {
 		vconf_get_bool;
 		vconf_get_str;
 		vconf_get_dbl;
+		vconf_get_ext_errno;
 	local:
 		*;
 };

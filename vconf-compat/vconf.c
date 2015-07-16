@@ -726,3 +726,8 @@ EXPORT int vconf_get_dbl(const char *key, double *dblval)
 	return 0;
 }
 
+int vconf_get_ext_errno(void)
+{
+	return errno * -1;
+}
+
