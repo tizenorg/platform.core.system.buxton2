@@ -144,6 +144,7 @@ static int recv_cont(struct recv_info *rif)
 		bxt_dbg("rif %p received %d / %d", rif, rif->recved, rif->len);
 
 		assert(rif->callback);
+		recv_list = g_list_remove(recv_list, rif);
 		rif->callback(rif->user_data, rif->type, rif->data, rif->len);
 		remove_rif(rif);
 	}
