@@ -817,6 +817,8 @@ static struct _keynode_t *get_keynode(struct _keylist_t *keylist,
 		return NULL;
 	}
 
+	keylist->list = g_list_append(keylist->list, keynode);
+
 	return keynode;
 }
 
@@ -900,13 +902,15 @@ EXPORT int vconf_keylist_add_str(keylist_t *keylist,
 		return -1;
 	}
 
-	keynode = get_keynode(keylist, keyname);
-	if (!keynode)
-		return -1;
-
 	s = strdup(value);
 	if (!s)
 		return -1;
+
+	keynode = get_keynode(keylist, keyname);
+	if (!keynode) {
+		free(s);
+		return -1;
+	}
 
 	if (keynode->type == VCONF_TYPE_STRING)
 		free(keynode->value.s);
@@ -1060,6 +1064,7 @@ EXPORT int vconf_get(keylist_t *keylist,
 	}
 
 	g_list_free_full(keylist->list, (GDestroyNotify)free_keynode);
+	keylist->list = NULL;
 
 	for (i = 0; i < len; i++) {
 		struct _keynode_t *keynode;
