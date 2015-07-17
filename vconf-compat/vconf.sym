@@ -17,6 +17,16 @@ VCONF_BUXTON_1.0 {
 		vconf_get_str;
 		vconf_get_dbl;
 		vconf_get_ext_errno;
+		vconf_keylist_new;
+		vconf_keylist_free;
+		vconf_keylist_add_int;
+		vconf_keylist_add_bool;
+		vconf_keylist_add_dbl;
+		vconf_keylist_add_str;
+		vconf_keylist_del;
+		vconf_get;
+		vconf_set;
+		vconf_keylist_lookup;
 	local:
 		*;
 };

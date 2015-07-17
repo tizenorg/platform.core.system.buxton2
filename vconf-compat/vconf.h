@@ -44,17 +44,7 @@ enum vconf_t {
 /**
  * keynode_t key node structure
  */
-typedef struct _keynode_t {
-	char *keyname;
-	int type;
-	union {
-		int i;
-		int b;
-		double d;
-		char *s;
-	} value;
-	struct _keynode_t *next;
-} keynode_t;
+typedef struct _keynode_t keynode_t;
 
 /**
  * Get the name of key
@@ -226,6 +216,37 @@ int vconf_get_dbl(const char *key, double *dblval);
  * @deprecated use buxton APIs
  */
 int vconf_get_ext_errno(void);
+
+
+/**
+ * keylist_t
+ */
+typedef struct _keylist_t keylist_t;
+
+keylist_t *vconf_keylist_new(void);
+int vconf_keylist_free(keylist_t *keylist);
+
+int vconf_keylist_add_int(keylist_t *keylist, const char *keyname, int value);
+int vconf_keylist_add_bool(keylist_t *keylist, const char *keyname, int value);
+int vconf_keylist_add_dbl(keylist_t *keylist,
+		const char *keyname, double value);
+int vconf_keylist_add_str(keylist_t *keylist,
+		const char *keyname, const char *value);
+int vconf_keylist_del(keylist_t *keylist, const char *keyname);
+
+enum get_option_t {
+	VCONF_GET_KEY = 0,
+	VCONF_GET_ALL,
+	VCONF_GET_DIR,
+};
+typedef enum get_option_t get_option_t;
+
+int vconf_get(keylist_t *keylist,
+		const char *in_parentDIR, get_option_t option);
+int vconf_set(keylist_t *keylist);
+
+int vconf_keylist_lookup(keylist_t *keylist, const char *keyname,
+		keynode_t **return_node);
 
 #ifdef __cplusplus
 }
