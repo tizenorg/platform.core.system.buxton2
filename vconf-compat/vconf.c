@@ -50,6 +50,17 @@ struct noti_cb {
 	gboolean deleted;
 };
 
+struct _keynode_t {
+	char *keyname;
+	int type;
+	union {
+		int i;
+		int b;
+		double d;
+		char *s;
+	} value;
+};
+
 EXPORT char *vconf_keynode_get_name(keynode_t *keynode)
 {
 	if (!keynode || !keynode->keyname) {
@@ -477,7 +488,7 @@ EXPORT int vconf_ignore_key_changed(const char *key, vconf_callback_fn cb)
 	return unregister_noti(noti);
 }
 
-static int vconf_set(const char *key, const struct buxton_value *val)
+static int _vconf_set(const char *key, const struct buxton_value *val)
 {
 	int r;
 
@@ -511,7 +522,7 @@ EXPORT int vconf_set_int(const char *key, int intval)
 	if (!val)
 		return -1;
 
-	r = vconf_set(key, val);
+	r = _vconf_set(key, val);
 
 	buxton_value_free(val);
 
@@ -532,7 +543,7 @@ EXPORT int vconf_set_bool(const char *key, int boolval)
 	if (!val)
 		return -1;
 
-	r = vconf_set(key, val);
+	r = _vconf_set(key, val);
 
 	buxton_value_free(val);
 
@@ -553,7 +564,7 @@ EXPORT int vconf_set_str(const char *key, const char *strval)
 	if (!val)
 		return -1;
 
-	r = vconf_set(key, val);
+	r = _vconf_set(key, val);
 
 	buxton_value_free(val);
 
@@ -574,14 +585,14 @@ EXPORT int vconf_set_dbl(const char *key, double dblval)
 	if (!val)
 		return -1;
 
-	r = vconf_set(key, val);
+	r = _vconf_set(key, val);
 
 	buxton_value_free(val);
 
 	return r;
 }
 
-static int vconf_get(const char *key, enum buxton_key_type type,
+static int _vconf_get(const char *key, enum buxton_key_type type,
 		struct buxton_value **val)
 {
 	int r;
@@ -629,7 +640,7 @@ EXPORT int vconf_get_int(const char *key, int *intval)
 		return -1;
 	}
 
-	r = vconf_get(key, BUXTON_TYPE_INT32, &val);
+	r = _vconf_get(key, BUXTON_TYPE_INT32, &val);
 	if (r == -1)
 		return -1;
 
@@ -656,7 +667,7 @@ EXPORT int vconf_get_bool(const char *key, int *boolval)
 		return -1;
 	}
 
-	r = vconf_get(key, BUXTON_TYPE_BOOLEAN, &val);
+	r = _vconf_get(key, BUXTON_TYPE_BOOLEAN, &val);
 	if (r == -1)
 		return -1;
 
@@ -684,7 +695,7 @@ EXPORT char *vconf_get_str(const char *key)
 		return NULL;
 	}
 
-	r = vconf_get(key, BUXTON_TYPE_STRING, &val);
+	r = _vconf_get(key, BUXTON_TYPE_STRING, &val);
 	if (r == -1)
 		return NULL;
 
@@ -710,7 +721,7 @@ EXPORT int vconf_get_dbl(const char *key, double *dblval)
 		return -1;
 	}
 
-	r = vconf_get(key, BUXTON_TYPE_DOUBLE, &val);
+	r = _vconf_get(key, BUXTON_TYPE_DOUBLE, &val);
 	if (r == -1)
 		return -1;
 
@@ -726,8 +737,405 @@ EXPORT int vconf_get_dbl(const char *key, double *dblval)
 	return 0;
 }
 
-int vconf_get_ext_errno(void)
+EXPORT int vconf_get_ext_errno(void)
 {
 	return errno * -1;
+}
+
+struct _keylist_t {
+	GList *list; /* struct _keynode_t list */
+};
+
+EXPORT keylist_t *vconf_keylist_new(void)
+{
+	return calloc(1, sizeof(struct _keylist_t));
+}
+
+static void free_keynode(struct _keynode_t *keynode)
+{
+	if (!keynode)
+		return;
+
+	if (keynode->type == VCONF_TYPE_STRING)
+		free(keynode->value.s);
+
+	free(keynode->keyname);
+	free(keynode);
+}
+
+EXPORT int vconf_keylist_free(keylist_t *keylist)
+{
+	if (!keylist) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	g_list_free_full(keylist->list, (GDestroyNotify)free_keynode);
+	free(keylist);
+
+	return 0;
+}
+
+static struct _keynode_t *find_keynode(struct _keylist_t *keylist,
+		const char *keyname)
+{
+	struct _keynode_t *keynode;
+	GList *l;
+
+	assert(keylist);
+	assert(keyname);
+
+	for (l = keylist->list; l; l = g_list_next(l)) {
+		keynode = l->data;
+
+		if (keynode->keyname && !strcmp(keynode->keyname, keyname))
+			return keynode;
+	}
+
+	return NULL;
+}
+
+static struct _keynode_t *get_keynode(struct _keylist_t *keylist,
+		const char *keyname)
+{
+	struct _keynode_t *keynode;
+
+	assert(keylist);
+	assert(keyname);
+
+	keynode = find_keynode(keylist, keyname);
+	if (keynode)
+		return keynode;
+
+	keynode = calloc(1, sizeof(*keynode));
+	if (!keynode)
+		return NULL;
+
+	keynode->keyname = strdup(keyname);
+	if (!keynode->keyname) {
+		free(keynode);
+		return NULL;
+	}
+
+	return keynode;
+}
+
+EXPORT int vconf_keylist_add_int(keylist_t *keylist,
+		const char *keyname, int value)
+{
+	struct _keynode_t *keynode;
+
+	if (!keylist || !keyname) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	keynode = get_keynode(keylist, keyname);
+	if (!keynode)
+		return -1;
+
+	if (keynode->type == VCONF_TYPE_STRING)
+		free(keynode->value.s);
+
+	keynode->type = VCONF_TYPE_INT;
+	keynode->value.i = value;
+
+	return 0;
+}
+
+EXPORT int vconf_keylist_add_bool(keylist_t *keylist,
+		const char *keyname, int value)
+{
+	struct _keynode_t *keynode;
+
+	if (!keylist || !keyname) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	keynode = get_keynode(keylist, keyname);
+	if (!keynode)
+		return -1;
+
+	if (keynode->type == VCONF_TYPE_STRING)
+		free(keynode->value.s);
+
+	keynode->type = VCONF_TYPE_BOOL;
+	keynode->value.b = value;
+
+	return 0;
+}
+
+EXPORT int vconf_keylist_add_dbl(keylist_t *keylist,
+                const char *keyname, double value)
+{
+	struct _keynode_t *keynode;
+
+	if (!keylist || !keyname) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	keynode = get_keynode(keylist, keyname);
+	if (!keynode)
+		return -1;
+
+	if (keynode->type == VCONF_TYPE_STRING)
+		free(keynode->value.s);
+
+	keynode->type = VCONF_TYPE_DOUBLE;
+	keynode->value.d = value;
+
+	return 0;
+}
+
+EXPORT int vconf_keylist_add_str(keylist_t *keylist,
+                const char *keyname, const char *value)
+{
+	struct _keynode_t *keynode;
+	char *s;
+
+	if (!keylist || !keyname || !value) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	keynode = get_keynode(keylist, keyname);
+	if (!keynode)
+		return -1;
+
+	s = strdup(value);
+	if (!s)
+		return -1;
+
+	if (keynode->type == VCONF_TYPE_STRING)
+		free(keynode->value.s);
+
+	keynode->value.s = s;
+
+	return 0;
+}
+
+EXPORT int vconf_keylist_del(keylist_t *keylist, const char *keyname)
+{
+	struct _keynode_t *keynode;
+
+	if (!keylist || !keyname) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	keynode= find_keynode(keylist, keyname);
+	if (!keynode) {
+		errno = ENOENT;
+		return -1;
+	}
+
+	keylist->list = g_list_remove(keylist->list, keynode);
+	free_keynode(keynode);
+
+	return 0;
+}
+
+static int set_keynode_value(struct buxton_value *v, struct _keynode_t *keynode)
+{
+	int r;
+	enum buxton_key_type t;
+	const char *s;
+
+	assert(v);
+	assert(keynode);
+
+	r = buxton_value_get_type(v, &t);
+	if (r == -1)
+		t = BUXTON_TYPE_UNKNOWN;
+
+	switch (t) {
+	case BUXTON_TYPE_INT32:
+		keynode->type = VCONF_TYPE_INT;
+		r = buxton_value_get_int32(v, &keynode->value.i);
+		break;
+	case BUXTON_TYPE_BOOLEAN:
+		keynode->type = VCONF_TYPE_BOOL;
+		r = buxton_value_get_boolean(v, &keynode->value.b);
+		break;
+	case BUXTON_TYPE_DOUBLE:
+		keynode->type = VCONF_TYPE_DOUBLE;
+		r = buxton_value_get_double(v, &keynode->value.d);
+		break;
+	case BUXTON_TYPE_STRING:
+		keynode->type = VCONF_TYPE_STRING;
+		r = buxton_value_get_string(v, &s);
+		if (r != -1) {
+			if (s) {
+				keynode->value.s = strdup(s);
+				if (!keynode->value.s)
+					r = -1;
+			}
+		}
+		break;
+	default:
+		LOGE("set keynode: unsupported key type %d", t);
+		r = 0; /* ignore error */
+		break;
+	}
+
+	return r;
+}
+
+static struct _keynode_t *alloc_keynode(struct buxton_layer *layer,
+		const char *keyname)
+{
+	int r;
+	struct buxton_value *v;
+	struct _keynode_t *keynode;
+
+	assert(client);
+	assert(layer);
+	assert(keyname);
+
+	r = buxton_get_value_sync(client, layer, keyname, &v);
+	if (r == -1) {
+		LOGE("get value: key '%s' errno %d", keyname, errno);
+		return NULL;
+	}
+
+	keynode = calloc(1, sizeof(*keynode));
+	if (!keynode) {
+		buxton_value_free(v);
+		return NULL;
+	}
+
+	keynode->keyname = strdup(keyname);
+	if (!keynode->keyname) {
+		free(keynode);
+		buxton_value_free(v);
+		return NULL;
+	}
+
+	r = set_keynode_value(v, keynode);
+	if (r == -1) {
+		free(keynode);
+		buxton_value_free(v);
+		return NULL;
+	}
+
+	return keynode;
+}
+
+EXPORT int vconf_get(keylist_t *keylist,
+                const char *in_parentDIR, get_option_t option)
+{
+	int r;
+	char **names;
+	unsigned int len;
+	int i;
+	int dirlen;
+	struct buxton_layer *layer;
+
+	if (!keylist || !in_parentDIR) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	dirlen = strlen(in_parentDIR);
+	if (dirlen < 2) { /* minimum is "db" */
+		errno = EINVAL;
+		return -1;
+	}
+
+	r = _open();
+	if (r == -1)
+		return -1;
+
+	layer = get_layer(in_parentDIR);
+
+	r = buxton_list_keys_sync(client, layer, &names, &len);
+	if (r == -1) {
+		LOGE("get key list: errno %d", errno);
+		_close();
+		return -1;
+	}
+
+	g_list_free_full(keylist->list, (GDestroyNotify)free_keynode);
+
+	for (i = 0; i < len; i++) {
+		struct _keynode_t *keynode;
+
+		if (strncmp(in_parentDIR, names[i], dirlen))
+			continue;
+
+		keynode = alloc_keynode(layer, names[i]);
+		if (keynode)
+			keylist->list = g_list_append(keylist->list, keynode);
+	}
+
+	_close();
+
+	return 0;
+}
+
+EXPORT int vconf_set(keylist_t *keylist)
+{
+	int r;
+	GList *l;
+
+	if (!keylist) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	r = _open();
+	if (r == -1)
+		return -1;
+
+	for (l = keylist->list; l; l = g_list_next(l)) {
+		struct _keynode_t *keynode = l->data;
+		int r;
+
+		switch (keynode->type) {
+		case VCONF_TYPE_STRING:
+			r = vconf_set_str(keynode->keyname, keynode->value.s);
+			break;
+		case VCONF_TYPE_INT:
+			r = vconf_set_int(keynode->keyname, keynode->value.i);
+			break;
+		case VCONF_TYPE_BOOL:
+			r = vconf_set_bool(keynode->keyname, keynode->value.b);
+			break;
+		case VCONF_TYPE_DOUBLE:
+			r = vconf_set_dbl(keynode->keyname, keynode->value.d);
+			break;
+		default:
+			LOGE("unknown key type: %d", keynode->type);
+			r = 0;
+			break;
+		}
+		if (r == -1)
+			LOGE("set key '%s' errno %d", keynode->keyname, errno);
+	}
+
+	_close();
+
+	return 0;
+}
+
+EXPORT int vconf_keylist_lookup(keylist_t *keylist, const char *keyname,
+                keynode_t **return_node)
+{
+	struct _keynode_t *keynode;
+
+	if (!keylist || !keyname || !return_node) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	keynode = find_keynode(keylist, keyname);
+	if (!keynode)
+		return 0;
+
+	*return_node = keynode;
+
+	return keynode->type;
 }
 
