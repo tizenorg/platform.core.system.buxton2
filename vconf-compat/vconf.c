@@ -915,6 +915,7 @@ EXPORT int vconf_keylist_add_str(keylist_t *keylist,
 	if (keynode->type == VCONF_TYPE_STRING)
 		free(keynode->value.s);
 
+	keynode->type = VCONF_TYPE_STRING;
 	keynode->value.s = s;
 
 	return 0;
