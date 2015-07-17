@@ -58,8 +58,10 @@ Requires:      %{name} = %{version}-%{release}
 Requires:      /usr/bin/getopt
 Obsoletes:     vconf-buxton
 Obsoletes:     vconf
+Obsoletes:     vconf-keys
 Provides:      vconf-buxton
 Provides:      vconf
+Provides:      vconf-keys
 
 %description -n vconf-compat
 Buxton wrapper library for providing vconf APIs
@@ -72,8 +74,12 @@ Requires:      vconf-internal-keys-devel
 BuildRequires: pkgconfig(vconf-internal-keys)
 Obsoletes:     vconf-buxton-devel
 Obsoletes:     vconf-buxton-keys-devel
+Obsoletes:     vconf-devel
+Obsoletes:     vconf-keys-devel
 Provides:      vconf-buxton-devel
 Provides:      vconf-buxton-keys-devel
+Provides:      vconf-devel
+Provides:      vconf-keys-devel
 
 %description -n vconf-compat-devel
 Buxton wrapper library for providing vconf APIs (devel)
