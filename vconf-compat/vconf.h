@@ -223,28 +223,121 @@ int vconf_get_ext_errno(void);
  */
 typedef struct _keylist_t keylist_t;
 
+/**
+ * Create a new keylist
+ *
+ * @return keylist_t on success, NULL on error
+ * @deprecated use buxton APIs
+ */
 keylist_t *vconf_keylist_new(void);
+
+/**
+ * Release a keylist
+ *
+ * @param[in] keylist keylist_t to be freed
+ * @return 0 on success, -1 on error
+ * @deprecated use buxton APIs
+ */
 int vconf_keylist_free(keylist_t *keylist);
 
+/**
+ * Add an integer type key to keylist
+ *
+ * @param[in] keylist keylist_t
+ * @param[in] keyname the name of key
+ * @param[in] value an integer value
+ * @return 0 on success, -1 on error
+ * @deprecated use buxton APIs
+ */
 int vconf_keylist_add_int(keylist_t *keylist, const char *keyname, int value);
+
+/**
+ * Add a boolean type key to keylist
+ *
+ * @param[in] keylist keylist_t
+ * @param[in] keyname the name of key
+ * @param[in] value a boolean value
+ * @return 0 on success, -1 on error
+ * @deprecated use buxton APIs
+ */
 int vconf_keylist_add_bool(keylist_t *keylist, const char *keyname, int value);
+
+/**
+ * Add a double-precision float type key to keylist
+ *
+ * @param[in] keylist keylist_t
+ * @param[in] keyname the name of key
+ * @param[in] value a double value
+ * @return 0 on success, -1 on error
+ * @deprecated use buxton APIs
+ */
 int vconf_keylist_add_dbl(keylist_t *keylist,
 		const char *keyname, double value);
+
+/**
+ * Add a string type key to keylist
+ *
+ * @param[in] keylist keylist_t
+ * @param[in] keyname the name of key
+ * @param[in] value a string value
+ * @return 0 on success, -1 on error
+ * @deprecated use buxton APIs
+ */
 int vconf_keylist_add_str(keylist_t *keylist,
 		const char *keyname, const char *value);
+
+/**
+ * Remove a key from keylist
+ *
+ * @param[in] keylist keylist_t
+ * @param[in] keyname the name of key
+ * @return 0 on success, -1 on error
+ * @deprecated use buxton APIs
+ */
 int vconf_keylist_del(keylist_t *keylist, const char *keyname);
 
+/**
+ * vconf_get options
+ */
 enum get_option_t {
-	VCONF_GET_KEY = 0,
-	VCONF_GET_ALL,
-	VCONF_GET_DIR,
+	VCONF_GET_KEY = 0, /**< get keys */
+	VCONF_GET_ALL, /**< get keys and directories */
+	VCONF_GET_DIR, /**< get directories */
 };
 typedef enum get_option_t get_option_t;
 
+/**
+ * Get keys in the in_parentDIR directory
+ *
+ * @param[in] keylist keylist_t
+ * @param[in] in_parentDIR parent directory
+ * @param[in] option enum get_option_t
+ * @return 0 on success, -1 on error
+ * @deprecated use buxton APIs
+ */
 int vconf_get(keylist_t *keylist,
 		const char *in_parentDIR, get_option_t option);
+
+/**
+ * Set the keys in keylist
+ *
+ * @param[in] keylist keylist_t
+ * @return 0 on success, -1 on error
+ * @deprecated use buxton APIs
+ */
 int vconf_set(keylist_t *keylist);
 
+/**
+ * Look for a keynode with keyname in keylist
+ *
+ * @param[in] keylist keylist_t
+ * @param[in] keyname the name of key
+ * @param[out] return_node keynode which has the same keyname
+ * @return type of key which is found, 0 if there is no matched key
+ * @deprecated use buxton APIs
+ * @note return_node is included in keylist. Do not free. \n
+ *       It is valid until keylist is freed.
+ */
 int vconf_keylist_lookup(keylist_t *keylist, const char *keyname,
 		keynode_t **return_node);
 
