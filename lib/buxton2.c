@@ -704,17 +704,15 @@ static int wait_msg(struct buxton_client *client, guint32 msgid)
 	ms = TS_SUB(&to, &t);
 
 	while (ms > 0) {
-		r = poll(fds, 1, ms);
+		r = poll(fds, 1, ms > 100 ? 100 : ms);
+
 		switch (r) {
 		case -1:
 			bxt_err("wait response: poll: fd %d errno %d",
 					client->fd, errno);
 			break;
 		case 0:
-			bxt_err("wait response: poll: fd %d timeout",
-					client->fd);
-			errno = ETIMEDOUT;
-			r = -1;
+			/* poll timeout, do nothing */
 			break;
 		default:
 			r = proc_msg(client);
@@ -736,6 +734,7 @@ static int wait_msg(struct buxton_client *client, guint32 msgid)
 	}
 
 	bxt_err("wait response: timeout");
+	errno = ETIMEDOUT;
 
 	return -1;
 }

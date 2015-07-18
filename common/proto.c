@@ -23,6 +23,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include <poll.h>
+#include <pthread.h>
 
 #include "common.h"
 #include "log.h"
@@ -45,6 +46,7 @@ struct recv_info {
 };
 
 static GList *recv_list;
+static pthread_mutex_t recv_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static struct recv_info *find_rif(int fd)
 {
@@ -75,10 +77,14 @@ static int recv_first(int fd, recv_callback callback, void *user_data)
 	r = recv(fd, &hdr, sizeof(uint32_t), 0);
 	if (r <= 0) {
 		free(rif);
-		if (r == 0)
+		if (r == 0) {
 			bxt_dbg("recv: fd %d closed", fd);
-		else
+		} else {
+			if (errno == EAGAIN)
+				return 0;
+
 			bxt_err("recv: fd %d errno %d", fd, errno);
+		}
 
 		return -1;
 	}
@@ -123,10 +129,14 @@ static int recv_cont(struct recv_info *rif)
 
 	r = recv(rif->fd, &rif->data[rif->recved], rif->len - rif->recved, 0);
 	if (r <= 0) {
-		if (r == 0)
+		if (r == 0) {
 			bxt_dbg("recv: fd %d closed", rif->fd);
-		else
+		} else {
+			if (errno == EAGAIN)
+				return 0;
+
 			bxt_err("recv: fd %d errno %d", rif->fd, errno);
+		}
 
 		remove_rif(rif);
 		return -1;
@@ -145,7 +155,9 @@ static int recv_cont(struct recv_info *rif)
 
 		assert(rif->callback);
 		recv_list = g_list_remove(recv_list, rif);
+		pthread_mutex_unlock(&recv_lock);
 		rif->callback(rif->user_data, rif->type, rif->data, rif->len);
+		pthread_mutex_lock(&recv_lock);
 		remove_rif(rif);
 	}
 
@@ -162,11 +174,13 @@ int proto_recv_frag(int fd, recv_callback callback, void *user_data)
 		return -1;
 	}
 
+	pthread_mutex_lock(&recv_lock);
 	rif = find_rif(fd);
 	if (!rif)
 		r = recv_first(fd, callback, user_data);
 	else
 		r = recv_cont(rif);
+	pthread_mutex_unlock(&recv_lock);
 
 	return r;
 }
