@@ -73,7 +73,7 @@ static int sock_create(const char *path)
 
 	chmod(sa.sun_path, 0666);
 
-	r = listen(fd, 128);
+	r = listen(fd, SOMAXCONN);
 	if (r == -1) {
 		bxt_err("Socket '%s': listen %d", path, errno);
 		close(fd);

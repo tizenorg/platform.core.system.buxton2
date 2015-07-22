@@ -122,26 +122,6 @@ static void remove_noti_cli(struct bxt_daemon *bxtd, struct bxt_client *cli)
 	}
 }
 
-static void free_client(struct bxt_client *cli)
-{
-	if (!cli)
-		return;
-
-	remove_noti_cli(cli->bxtd, cli);
-	g_list_free(cli->notilist);
-	cli->notilist = NULL;
-
-	if (cli->fd_id)
-		g_source_remove(cli->fd_id);
-
-	if (cli->fd != -1)
-		close(cli->fd);
-
-	free(cli->label);
-	free(cli);
-	bxt_dbg("free client %p", cli);
-}
-
 static void remove_notilist(struct bxt_noti *noti)
 {
 	GList *l;
@@ -787,6 +767,11 @@ static gboolean accept_cb(gint fd, GIOCondition cond, gpointer data)
 
 	cfd = accept(fd, (struct sockaddr *)&sa, &addrlen);
 	if (cfd == -1) {
+		if (errno == EMFILE) {
+			bxt_err("Too many open files, stop calling accept()");
+			bxtd->sk_id = 0;
+			return G_SOURCE_REMOVE;
+		}
 		bxt_err("Accept: %d", errno);
 		return G_SOURCE_CONTINUE;
 	}
@@ -794,6 +779,38 @@ static gboolean accept_cb(gint fd, GIOCondition cond, gpointer data)
 	add_client(bxtd, cfd);
 
 	return G_SOURCE_CONTINUE;
+}
+
+static void resume_accept(struct bxt_daemon *bxtd)
+{
+	assert(bxtd);
+
+	if (bxtd->sk_id == 0) {
+		bxt_err("Resume calling accept()");
+		bxtd->sk_id = g_unix_fd_add(bxtd->sk, G_IO_IN, accept_cb, bxtd);
+	}
+}
+
+static void free_client(struct bxt_client *cli)
+{
+	if (!cli)
+		return;
+
+	resume_accept(cli->bxtd);
+
+	remove_noti_cli(cli->bxtd, cli);
+	g_list_free(cli->notilist);
+	cli->notilist = NULL;
+
+	if (cli->fd_id)
+		g_source_remove(cli->fd_id);
+
+	if (cli->fd != -1)
+		close(cli->fd);
+
+	free(cli->label);
+	free(cli);
+	bxt_dbg("free client %p", cli);
 }
 
 static void bxt_exit(struct bxt_daemon *bxtd)
