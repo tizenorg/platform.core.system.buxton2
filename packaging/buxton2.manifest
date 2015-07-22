@@ -3,6 +3,6 @@
 		<domain name="_"/>
 	</request>
 	<assign>
-		<filesystem path="/var/lib/buxton2" label="System" type="transmutable"/>
+		<filesystem path="/var/lib/buxton2" label="System"/>
 	</assign>
 </manifest>
