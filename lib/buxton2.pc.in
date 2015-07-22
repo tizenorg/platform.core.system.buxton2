@@ -3,8 +3,8 @@ exec_prefix=${prefix}
 libdir=@LIB_INSTALL_DIR@
 includedir=@INCLUDE_INSTALL_DIR@
 
-Name: buxton
-Description: Library for buxton clients
+Name: buxton2
+Description: Library for buxton2 clients
 Version: @VERSION@
-Libs: -L${libdir} -lbuxton
+Libs: -L${libdir} -lbuxton2
 Cflags: -I${includedir}
