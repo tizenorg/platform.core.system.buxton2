@@ -22,12 +22,43 @@
 
 #include "common.h"
 
+#define MSG_FIRST  0x4
+#define MSG_MIDDLE 0x2
+#define MSG_LAST   0x1
+#define MSG_SINGLE (MSG_FIRST | MSG_MIDDLE | MSG_LAST)
+
+#define MSG_MTU    4096
+
+/*
+ * Message header (12 bytes) :
+ *
+ *  +-----------+-----------+-----------+-----------+
+ *  |  type (1) | mtype (1) |  Sequence number (2)  |
+ *  +-----------+-----------+-----------+-----------+
+ *  |               Total length (4)                |
+ *  +-----------+-----------+-----------+-----------+
+ *  |            Current data length (4)            |
+ *  +-----------+-----------+-----------+-----------+
+ *  |                  Data ... (n)                 |
+ *  +-----------+-----------+-----------+-----------+
+ *
+ */
+
+struct header {
+	uint8_t type; /* one of MSG_XXX */
+	uint8_t mtype; /* enum message_type */
+	uint16_t seq; /* sequence number */
+	uint32_t total; /* total length of message */
+	uint32_t len; /* length of current data */
+	uint8_t data[0];
+} __attribute__((packed));
+
 int proto_send(int fd, enum message_type type, uint8_t *data, int32_t len);
 int proto_recv(int fd, enum message_type *type, uint8_t **data, int32_t *len);
 
 typedef void (*recv_callback)(void *user_data,
 		enum message_type type, uint8_t *data, int32_t len);
-int proto_recv_frag(int fd, recv_callback callback, void *user_data);
+int proto_recv_async(int fd, recv_callback callback, void *user_data);
 int proto_send_block(int fd, enum message_type type, uint8_t *data,
 		int32_t len);
 

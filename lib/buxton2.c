@@ -380,7 +380,7 @@ static struct bxt_req *create_req(const struct buxton_layer *layer,
 	req->callback = callback;
 	req->list_cb = list_cb;
 	req->data = data;
-	req->msgid = ++client_msgid;
+	req->msgid = __atomic_fetch_add(&client_msgid, 1, __ATOMIC_RELAXED);
 
 	return req;
 }
@@ -670,7 +670,7 @@ static int proc_msg(struct buxton_client *client)
 {
 	int r;
 
-	r = proto_recv_frag(client->fd, proc_msg_cb, client);
+	r = proto_recv_async(client->fd, proc_msg_cb, client);
 	if (r == -1) {
 		bxt_err("recv msg: fd %d errno %d", client->fd, errno);
 		return -1;
