@@ -1862,6 +1862,8 @@ static void free_client(struct buxton_client *cli)
 	if (!cli)
 		return;
 
+	close_conn(cli);
+
 	clients = g_list_remove(clients, cli);
 
 	if (cli->req_cbs)
@@ -1869,8 +1871,6 @@ static void free_client(struct buxton_client *cli)
 
 	if (cli->noti_cbs)
 		g_hash_table_destroy(cli->noti_cbs);
-
-	close_conn(cli);
 
 	free(cli);
 }
