@@ -69,7 +69,7 @@ static gboolean signal_cb(gint fd, GIOCondition cond, gpointer data)
 		g_main_loop_quit(bxtd->loop);
 		break;
 	case SIGPIPE:
-		bxt_err("SIGPIPE received");
+		/* Ignore signal */
 		break;
 	}
 
