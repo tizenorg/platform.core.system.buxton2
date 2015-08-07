@@ -28,14 +28,14 @@
 
 #  include <stdio.h>
 
-#  if defined(NDEBUG)
+#  if !defined(DEBUG_LOG)
 
 #    define bxt_info(fmt, ...) printf("Buxton: " fmt "\n", ##__VA_ARGS__)
 #    define bxt_err(fmt, ...) \
 	fprintf(stderr, "Buxton: " fmt "\n", ##__VA_ARGS__)
 #    define bxt_dbg(fmt, ...) do { } while (0)
 
-#  else /* NDEBUG */
+#  else /* DEBUG_LOG */
 
 #    define bxt_info(fmt, ...) printf("Buxton: " fmt "\n", ##__VA_ARGS__)
 #    define bxt_err(fmt, ...) \
@@ -44,6 +44,6 @@
 	printf("Buxton:D:%s:%d: " fmt "\n", __func__, __LINE__, \
 			##__VA_ARGS__)
 
-#  endif
+#  endif /* DEBUG_LOG */
 
 #endif /* _DLOG_H_ */

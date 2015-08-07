@@ -1,5 +1,5 @@
 Name:           buxton2
-Version:        1.0
+Version:        1.1
 Release:        0
 License:        Apache-2.0
 Summary:        A security-enabled configuration system
@@ -96,7 +96,8 @@ cp %{SOURCE1001} .
 	-DDB_DIR:PATH=%{_localstatedir}/lib/%{name} \
 	-DTMPFS_DIR:PATH=/run/%{name} \
 	-DSOCKPATH:PATH=/run/%{name}-0 \
-	-DNDEBUG:BOOL=TRUE \
+	-DNDEBUG:BOOL=FALSE \
+	-DDEBUG_LOG:BOOL=FALSE \
 	.
 
 %__make %{?_smp_mflags}

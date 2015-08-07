@@ -703,7 +703,10 @@ static gboolean client_cb(gint fd, GIOCondition cond, gpointer data)
 
 	if (cond & (G_IO_HUP | G_IO_ERR | G_IO_NVAL)) {
 		if (cond & (G_IO_ERR | G_IO_NVAL))
-			bxt_err("Client %d: IO error", fd);
+			bxt_err("Client %d: PID %d(%s) IO %s", fd,
+					cli->cred.pid,
+					cli->label ? cli->label : "",
+					cond & G_IO_ERR ?  "error" : "nval");
 
 		cli->fd_id = 0;
 		g_idle_add(del_client, cli);

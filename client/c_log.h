@@ -18,7 +18,7 @@
 
 #pragma once
 
-#if defined(NDEBUG)
+#if !defined(DEBUG_LOG)
 
 #  define bxt_err(fmt, ...) fprintf(stderr, fmt "\n", ##__VA_ARGS__)
 #  define bxt_dbg(fmt, ...) do { } while (0)
