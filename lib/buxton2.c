@@ -720,8 +720,11 @@ static int wait_msg(struct buxton_client *client, guint32 msgid)
 		}
 
 		/* poll or proc error */
-		if (r == -1)
+		if (r == -1) {
+			g_hash_table_remove(client->req_cbs,
+					GUINT_TO_POINTER(msgid));
 			return -1;
+		}
 
 		req = g_hash_table_lookup(client->req_cbs,
 				GUINT_TO_POINTER(msgid));
@@ -735,6 +738,8 @@ static int wait_msg(struct buxton_client *client, guint32 msgid)
 
 	bxt_err("wait response: timeout");
 	errno = ETIMEDOUT;
+
+	g_hash_table_remove(client->req_cbs, GUINT_TO_POINTER(msgid));
 
 	return -1;
 }
