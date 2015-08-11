@@ -862,7 +862,7 @@ static int bxt_init(struct bxt_daemon *bxtd, const char *confpath)
 		return -1;
 
 	bxtd->sk = sock_get_server(SOCKPATH);
-	if (!bxtd->sk == -1)
+	if (bxtd->sk == -1)
 		return -1;
 
 	bxtd->sk_id = g_unix_fd_add(bxtd->sk, G_IO_IN, accept_cb, bxtd);
