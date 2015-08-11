@@ -496,7 +496,7 @@ int serialz_request(const struct request *req, uint8_t **data, int *len)
 				data ? "" : " data",
 				len ? "" : " len",
 				req ? "" : " req",
-				req->layer ? "" : " layer");
+				req && !req->layer ? " layer" : "");
 		return -1;
 	}
 
