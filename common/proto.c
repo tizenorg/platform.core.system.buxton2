@@ -182,8 +182,8 @@ static int recv_data(struct recv_info *rif, uint32_t len)
 	}
 
 	if (r < sizeof(*hdr) + len) {
-		bxt_err("recv: fd %d expect %d > received %d",
-				rif->fd, sizeof(*hdr) + len, r);
+		bxt_err("recv: fd %d expect %u > received %d",
+				rif->fd, (uint32_t)sizeof(*hdr) + len, r);
 		return -1;
 	}
 
