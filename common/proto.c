@@ -29,6 +29,8 @@
 #include "log.h"
 #include "proto.h"
 
+#define SEND_TIMEOUT 1000 /* milliseconds */
+
 struct recv_info {
 	int fd;
 	uint16_t seq;
@@ -381,8 +383,7 @@ int proto_send(int fd, enum message_type type, uint8_t *data, int32_t len)
 	fds[0].revents = 0;
 
 	do {
-		/* CAN BE BLOCKED ! */
-		r = poll(fds, 1, -1);
+		r = poll(fds, 1, SEND_TIMEOUT);
 		if (r == -1) {
 			if (errno == EINTR)
 				continue;
@@ -392,7 +393,15 @@ int proto_send(int fd, enum message_type type, uint8_t *data, int32_t len)
 
 			return -1;
 		}
-	} while (r <= 0);
+
+		if (r == 0) {
+			bxt_err("send: fd %d poll timeout", fd);
+			free(buf);
+			errno = ETIMEDOUT;
+
+			return -1;
+		}
+	} while (r < 0);
 
 	r = send(fd, buf, sizeof(*hdr) + len, 0);
 
