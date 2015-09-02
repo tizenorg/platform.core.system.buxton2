@@ -808,13 +808,14 @@ static struct bxt_req *set_value(struct buxton_client *client,
 	rqst.key = (char *)key;
 	rqst.val = (struct buxton_value *)val;
 
+	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
+
 	r = send_req(client, &rqst);
 	if (r == -1) {
-		free_req(req);
+		g_hash_table_remove(client->req_cbs,
+				GUINT_TO_POINTER(req->msgid));
 		return NULL;
 	}
-
-	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
 
 	return req;
 }
@@ -893,13 +894,14 @@ static struct bxt_req *get_value(struct buxton_client *client,
 	rqst.layer = req->layer;
 	rqst.key = (char *)key;
 
+	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
+
 	r = send_req(client, &rqst);
 	if (r == -1) {
-		free_req(req);
+		g_hash_table_remove(client->req_cbs,
+				GUINT_TO_POINTER(req->msgid));
 		return NULL;
 	}
-
-	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
 
 	return req;
 }
@@ -986,13 +988,14 @@ static struct bxt_req *list_keys(struct buxton_client *client,
 	rqst.msgid = req->msgid;
 	rqst.layer = req->layer;
 
+	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
+
 	r = send_req(client, &rqst);
 	if (r == -1) {
-		free_req(req);
+		g_hash_table_remove(client->req_cbs,
+				GUINT_TO_POINTER(req->msgid));
 		return NULL;
 	}
-
-	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
 
 	return req;
 }
@@ -1153,13 +1156,14 @@ static struct bxt_req *register_noti(struct buxton_client *client,
 	rqst.layer = req->layer;
 	rqst.key = (char *)key;
 
+	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
+
 	r = send_req(client, &rqst);
 	if (r == -1) {
-		free_req(req);
+		g_hash_table_remove(client->req_cbs,
+				GUINT_TO_POINTER(req->msgid));
 		return NULL;
 	}
-
-	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
 
 	return req;
 }
@@ -1332,13 +1336,14 @@ static struct bxt_req *unregister_noti(struct buxton_client *client,
 	rqst.layer = req->layer;
 	rqst.key = (char *)key;
 
+	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
+
 	r = send_req(client, &rqst);
 	if (r == -1) {
-		free_req(req);
+		g_hash_table_remove(client->req_cbs,
+				GUINT_TO_POINTER(req->msgid));
 		return NULL;
 	}
-
-	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
 
 	return req;
 }
@@ -1470,13 +1475,14 @@ static struct bxt_req *create_value(struct buxton_client *client,
 	rqst.wpriv = (char *)write_privilege;
 	rqst.val = (struct buxton_value *)val;
 
+	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
+
 	r = send_req(client, &rqst);
 	if (r == -1) {
-		free_req(req);
+		g_hash_table_remove(client->req_cbs,
+				GUINT_TO_POINTER(req->msgid));
 		return NULL;
 	}
-
-	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
 
 	return req;
 }
@@ -1559,13 +1565,14 @@ static struct bxt_req *unset_value(struct buxton_client *client,
 	rqst.layer = req->layer;
 	rqst.key = (char *)key;
 
+	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
+
 	r = send_req(client, &rqst);
 	if (r == -1) {
-		free_req(req);
+		g_hash_table_remove(client->req_cbs,
+				GUINT_TO_POINTER(req->msgid));
 		return NULL;
 	}
-
-	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
 
 	return req;
 }
@@ -1654,13 +1661,14 @@ static struct bxt_req *set_priv(struct buxton_client *client,
 	val.type = BUXTON_TYPE_PRIVILEGE;
 	val.value.s = (char *)privilege;
 
+	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
+
 	r = send_req(client, &rqst);
 	if (r == -1) {
-		free_req(req);
+		g_hash_table_remove(client->req_cbs,
+				GUINT_TO_POINTER(req->msgid));
 		return NULL;
 	}
-
-	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
 
 	return req;
 }
@@ -1749,13 +1757,14 @@ static struct bxt_req *get_priv(struct buxton_client *client,
 	rqst.layer = req->layer;
 	rqst.key = (char *)key;
 
+	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
+
 	r = send_req(client, &rqst);
 	if (r == -1) {
-		free_req(req);
+		g_hash_table_remove(client->req_cbs,
+				GUINT_TO_POINTER(req->msgid));
 		return NULL;
 	}
-
-	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
 
 	return req;
 }
