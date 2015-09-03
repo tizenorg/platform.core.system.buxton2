@@ -139,6 +139,7 @@ static void flush_data(int fd, uint32_t len)
 	}
 }
 
+/* recv_lock should be unlocked before return */
 static int proto_recv_single(int fd, recv_callback callback, void *user_data)
 {
 	int r;
@@ -150,8 +151,14 @@ static int proto_recv_single(int fd, recv_callback callback, void *user_data)
 	assert(callback);
 
 	r = proto_recv(fd, &type, &data, &len);
-	if (r == -1)
+	pthread_mutex_unlock(&recv_lock);
+
+	if (r == -1) {
+		if (errno == EAGAIN || errno == EINTR)
+			return 0;
+
 		return -1;
+	}
 
 	callback(user_data, type, data, len);
 	free(data);
@@ -194,6 +201,7 @@ static int recv_data(struct recv_info *rif, uint32_t len)
 	return 0;
 }
 
+/* recv_lock should be unlocked before return */
 static int proto_recv_frag(int fd, struct header *hdr,
 		recv_callback callback, void *user_data)
 {
@@ -204,7 +212,6 @@ static int proto_recv_frag(int fd, struct header *hdr,
 	assert(hdr);
 	assert(callback);
 
-	pthread_mutex_lock(&recv_lock);
 	switch (hdr->type) {
 	case MSG_FIRST:
 		rif = add_rif(fd, hdr, callback, user_data);
@@ -268,8 +275,10 @@ int proto_recv_async(int fd, recv_callback callback, void *user_data)
 		return -1;
 	}
 
+	pthread_mutex_lock(&recv_lock);
 	r = recv(fd, &hdr, sizeof(hdr), MSG_PEEK);
 	if (r <= 0) {
+		pthread_mutex_unlock(&recv_lock);
 		if (r == 0) {
 			bxt_dbg("recv: fd %d closed", fd);
 		} else {
@@ -434,10 +443,12 @@ int proto_recv(int fd, enum message_type *type, uint8_t **data, int32_t *len)
 
 	r = recv(fd, &hdr, sizeof(hdr), 0);
 	if (r <= 0) {
-		if (r == 0)
+		if (r == 0) {
 			bxt_dbg("recv: fd %d closed", fd);
-		else
-			bxt_err("recv: fd %d errno %d", fd, errno);
+		} else {
+			if (errno != EAGAIN && errno != EINTR)
+				bxt_err("recv: fd %d errno %d", fd, errno);
+		}
 
 		return -1;
 	}
@@ -455,10 +466,12 @@ int proto_recv(int fd, enum message_type *type, uint8_t **data, int32_t *len)
 
 	r = recv(fd, _data, hdr.total, 0);
 	if (r <= 0) {
-		if (r == 0)
+		if (r == 0) {
 			bxt_dbg("recv: fd %d closed", fd);
-		else
-			bxt_err("recv: fd %d errno %d", fd, errno);
+		} else {
+			if (errno != EAGAIN && errno != EINTR)
+				bxt_err("recv: fd %d errno %d", fd, errno);
+		}
 
 		free(_data);
 
