@@ -28,6 +28,7 @@
 #include <unistd.h>
 #include <poll.h>
 #include <time.h>
+#include <pthread.h>
 
 #include <glib.h>
 #include <glib-unix.h>
@@ -89,6 +90,7 @@ struct buxton_client {
 };
 
 static GList *clients; /* data: buxton_client */
+static pthread_mutex_t clients_lock = PTHREAD_MUTEX_INITIALIZER;
 static guint32 client_msgid;
 
 static struct buxton_value *value_create(enum buxton_key_type type, void *value)
@@ -643,6 +645,8 @@ static void proc_msg_cb(void *user_data,
 
 	assert(client);
 
+	pthread_mutex_unlock(&clients_lock);
+
 	switch (type) {
 	case MSG_NOTI:
 		proc_msg_noti(client, data, len);
@@ -664,13 +668,27 @@ static void proc_msg_cb(void *user_data,
 		bxt_err("proc msg: unknown message type %d", type);
 		break;
 	}
+
+	pthread_mutex_lock(&clients_lock);
 }
 
 static int proc_msg(struct buxton_client *client)
 {
 	int r;
+	GList *f;
+
+	assert(client);
+
+	pthread_mutex_lock(&clients_lock);
+	f = g_list_find(clients, client);
+	if (!f) {
+		bxt_err("recv msg: cli %p removed\n", client);
+		pthread_mutex_unlock(&clients_lock);
+		return 0;
+	}
 
 	r = proto_recv_async(client->fd, proc_msg_cb, client);
+	pthread_mutex_unlock(&clients_lock);
 	if (r == -1) {
 		bxt_err("recv msg: fd %d errno %d", client->fd, errno);
 		return -1;
@@ -1852,11 +1870,22 @@ static void free_noti(struct bxt_noti *noti)
 static gboolean close_conn(gpointer data)
 {
 	struct buxton_client *cli = data;
+	GList *f;
 
 	assert(cli);
 
-	if (cli->fd == -1)
+	pthread_mutex_lock(&clients_lock);
+	f = g_list_find(clients, cli);
+	if (!f) {
+		bxt_err("%s: cli %p removed\n", __func__, cli);
+		pthread_mutex_unlock(&clients_lock);
 		return G_SOURCE_REMOVE;
+	}
+
+	if (cli->fd == -1) {
+		pthread_mutex_unlock(&clients_lock);
+		return G_SOURCE_REMOVE;
+	}
 
 	if (cli->fd_id) {
 		g_source_remove(cli->fd_id);
@@ -1865,6 +1894,7 @@ static gboolean close_conn(gpointer data)
 
 	close(cli->fd);
 	cli->fd = -1;
+	pthread_mutex_unlock(&clients_lock);
 	if (cli->st_callback)
 		cli->st_callback(BUXTON_STATUS_DISCONNECTED, cli->st_data);
 
@@ -1878,6 +1908,7 @@ static void free_client(struct buxton_client *cli)
 
 	close_conn(cli);
 
+	pthread_mutex_lock(&clients_lock);
 	clients = g_list_remove(clients, cli);
 
 	if (cli->req_cbs)
@@ -1887,6 +1918,7 @@ static void free_client(struct buxton_client *cli)
 		g_hash_table_destroy(cli->noti_cbs);
 
 	free(cli);
+	pthread_mutex_unlock(&clients_lock);
 }
 
 int connect_server(const char *addr)
@@ -1927,8 +1959,17 @@ static gboolean recv_cb(gint fd, GIOCondition cond, gpointer data)
 {
 	struct buxton_client *cli = data;
 	int r;
+	GList *f;
 
 	assert(cli);
+
+	pthread_mutex_lock(&clients_lock);
+	f = g_list_find(clients, cli);
+	if (!f) {
+		bxt_err("recv %d: cli %p removed\n", fd, cli);
+		pthread_mutex_unlock(&clients_lock);
+		return G_SOURCE_CONTINUE;
+	}
 
 	bxt_dbg("recv %d: cond %x", fd, cond);
 
@@ -1937,8 +1978,10 @@ static gboolean recv_cb(gint fd, GIOCondition cond, gpointer data)
 
 		cli->fd_id = 0;
 		g_idle_add(close_conn, cli);
+		pthread_mutex_unlock(&clients_lock);
 		return G_SOURCE_REMOVE;
 	}
+	pthread_mutex_unlock(&clients_lock);
 
 	r = proc_msg(cli);
 	if (r == -1) {
@@ -2014,7 +2057,9 @@ EXPORT int buxton_open(struct buxton_client **client,
 			G_IO_IN | G_IO_ERR | G_IO_HUP | G_IO_NVAL,
 			recv_cb, cli);
 
+	pthread_mutex_lock(&clients_lock);
 	clients = g_list_append(clients, cli);
+	pthread_mutex_unlock(&clients_lock);
 	*client = cli;
 
 	if (callback)
