@@ -8,7 +8,7 @@ Source0:        %{name}-%{version}.tar.gz
 Source1:        %{name}.conf
 Source2:        %{name}.service
 Source3:        %{name}.socket
-Source4:        %{name}-pre.service
+Source4:        %{name}.tmpfiles.conf
 Source1001:     %{name}.manifest
 BuildRequires:  cmake
 BuildRequires:  gdbm-devel
@@ -116,7 +116,8 @@ install -m 644 %{SOURCE1} %{buildroot}%{_sysconfdir}/%{name}.conf
 install -m 755 -d %{buildroot}%{_unitdir}
 install -m 644 %{SOURCE2} %{buildroot}%{_unitdir}/%{name}.service
 install -m 644 %{SOURCE3} %{buildroot}%{_unitdir}/%{name}.socket
-install -m 644 %{SOURCE4} %{buildroot}%{_unitdir}/%{name}-pre.service
+install -m 755 -d %{buildroot}%{_tmpfilesdir}
+install -m 644 %{SOURCE4} %{buildroot}%{_tmpfilesdir}/%{name}.conf
 
 # enable socket activation
 install -m 755 -d %{buildroot}%{_unitdir}/sockets.target.wants
@@ -153,7 +154,7 @@ chsmack -a System "${dbdir}"
 %{_libdir}/libbuxton2.so.*
 %{_unitdir}/%{name}.service
 %{_unitdir}/%{name}.socket
-%{_unitdir}/%{name}-pre.service
+%{_tmpfilesdir}/%{name}.conf
 %{_unitdir}/sockets.target.wants/%{name}.socket
 %attr(0700,buxton,buxton) %dir %{_localstatedir}/lib/%{name}
 

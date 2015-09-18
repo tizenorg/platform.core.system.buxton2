@@ -1,5 +1,5 @@
 [Unit]
-Description=Buxton Configuration Service
+Description=Buxton2 Configuration Service
 
 [Socket]
 ListenStream=/run/buxton2-0

@@ -1,7 +1,6 @@
 [Unit]
 Description=Buxton2 Configuration Service
-Requires=buxton2-pre.service
-After=buxton2-pre.service
+After=systemd-tmpfiles-setup.service
 
 [Service]
 Environment=BUXTON_CYNARA_PERMISSIVE_MODE=1
