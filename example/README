@@ -1,0 +1,10 @@
+To build example codes, enable BUILD_EXAMPLE option in buxton2.spec:
+
+  %cmake ... \
+	-DBUILD_EXAMPLE:BOOL=TRUE \
+	.
+
+You can find the executable files:
+
+  {GBS-BUILD-ROOT}/scratch.{ARCH}.0/home/abuild/rpmbuild/BUILD/buxton2-1.1/example
+
