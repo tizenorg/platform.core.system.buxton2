@@ -425,10 +425,8 @@ static void proc_unnotify(struct bxt_client *cli,
 	}
 
 	noti = g_hash_table_lookup(cli->bxtd->notis, lykey);
-
-	free(lykey);
-
 	if (!noti) {
+		free(lykey);
 		resp->res = ENOENT;
 		return;
 	}
@@ -442,6 +440,8 @@ static void proc_unnotify(struct bxt_client *cli,
 		g_hash_table_remove(cli->bxtd->notis, lykey);
 
 	resp->res = 0;
+
+	free(lykey);
 }
 
 static void proc_set_priv(struct bxt_client *cli,
