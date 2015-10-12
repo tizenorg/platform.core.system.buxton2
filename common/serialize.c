@@ -848,7 +848,6 @@ static int gv_to_res_list(GVariant *gv, struct response *res)
 
 	g_variant_iter_init(&iter, gv);
 	len = g_variant_iter_n_children(&iter);
-	assert(len >= 0);
 
 	res->names = calloc(len + 1, sizeof(void *));
 	if (!res->names)
