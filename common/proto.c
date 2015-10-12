@@ -294,6 +294,15 @@ int proto_recv_async(int fd, recv_callback callback, void *user_data)
 	if (hdr.type == MSG_SINGLE)
 		return proto_recv_single(fd, callback, user_data);
 
+	if (hdr.total >= MSG_TOTAL_MAX) {
+		bxt_err("recv: fd %d message total %d >= %d, message ignored",
+				fd, hdr.total, MSG_TOTAL_MAX);
+		flush_data(fd, sizeof(hdr) + hdr.len);
+		pthread_mutex_unlock(&recv_lock);
+		errno = EMSGSIZE;
+		return -1;
+	}
+
 	return proto_recv_frag(fd, &hdr, callback, user_data);
 }
 
@@ -453,8 +462,17 @@ int proto_recv(int fd, enum message_type *type, uint8_t **data, int32_t *len)
 		return -1;
 	}
 
-	if (r != sizeof(hdr) || hdr.len == 0 || hdr.type != MSG_SINGLE) {
+	if (r != sizeof(hdr) || hdr.len == 0 || hdr.type != MSG_SINGLE
+			|| hdr.total != hdr.len) {
 		bxt_err("recv: fd %d Invalid message", fd);
+		return -1;
+	}
+
+	if (hdr.total >= MSG_SINGLE_MAX) {
+		bxt_err("recv: fd %d message size %d >= %d",
+				fd, hdr.total, MSG_SINGLE_MAX);
+		flush_data(fd, hdr.total);
+		errno = EMSGSIZE;
 		return -1;
 	}
 

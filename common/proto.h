@@ -30,6 +30,19 @@
 #define MSG_MTU    4096
 
 /*
+ * Single type message
+ *   = key (<4KB) + value (<4KB) + privileges (<2KB) + etc (<6KB)
+ */
+#define MSG_SINGLE_MAX (1 << 14) /* 16KB */
+
+/*
+ * The length of MSG_LIST is the length of key name * number of keys.
+ * Usually, an average length of key name is about 35B.
+ * A 32MB message can send about 0.9M names of keys.
+ */
+#define MSG_TOTAL_MAX (1 << 25) /* 32 MB */
+
+/*
  * Message header (12 bytes) :
  *
  *  +-----------+-----------+-----------+-----------+
