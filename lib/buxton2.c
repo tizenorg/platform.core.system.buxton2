@@ -299,8 +299,10 @@ EXPORT struct buxton_value *buxton_value_duplicate(
 
 	if (val->type == BUXTON_TYPE_STRING && val->value.s) {
 		_val->value.s = strdup(val->value.s);
-		if (!_val->value.s)
+		if (!_val->value.s) {
+			free(_val);
 			return NULL;
+		}
 	}
 
 	return _val;
