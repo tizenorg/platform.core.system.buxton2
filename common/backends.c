@@ -64,8 +64,10 @@ const struct backend *backend_get(const char *name)
 	}
 
 	mod = g_hash_table_lookup(backends, name);
-	if (!mod)
+	if (!mod) {
 		errno = ENOENT;
+		return NULL;
+	}
 
 	return mod->backend;
 }
