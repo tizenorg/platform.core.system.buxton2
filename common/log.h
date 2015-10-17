@@ -26,24 +26,16 @@
 
 #else /* _DLOG_H_ */
 
-#  include <stdio.h>
+#  include <syslog.h>
+
+#  define bxt_info(fmt, ...) syslog(LOG_INFO, "Buxton: " fmt, ##__VA_ARGS__)
+#  define bxt_err(fmt, ...) syslog(LOG_ERR, "Buxton: " fmt, ##__VA_ARGS__)
 
 #  if !defined(DEBUG_LOG)
-
-#    define bxt_info(fmt, ...) printf("Buxton: " fmt "\n", ##__VA_ARGS__)
-#    define bxt_err(fmt, ...) \
-	fprintf(stderr, "Buxton: " fmt "\n", ##__VA_ARGS__)
 #    define bxt_dbg(fmt, ...) do { } while (0)
-
 #  else /* DEBUG_LOG */
-
-#    define bxt_info(fmt, ...) printf("Buxton: " fmt "\n", ##__VA_ARGS__)
-#    define bxt_err(fmt, ...) \
-	fprintf(stderr, "Buxton:Err: " fmt "\n", ##__VA_ARGS__)
 #    define bxt_dbg(fmt, ...) \
-	printf("Buxton:D:%s:%d: " fmt "\n", __func__, __LINE__, \
-			##__VA_ARGS__)
-
+	syslog(LOG_DEBUG, "Buxton:%s:%d: " fmt, __func__, __LINE__, ##__VA_ARGS__)
 #  endif /* DEBUG_LOG */
 
 #endif /* _DLOG_H_ */
