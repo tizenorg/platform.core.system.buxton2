@@ -16,6 +16,7 @@
  * limitations under the License.
  */
 
+#include <stdio.h>
 #include <string.h>
 #include <assert.h>
 #include <errno.h>
