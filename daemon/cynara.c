@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <errno.h>
+#include <string.h>
 
 #include <glib.h>
 #include <glib-unix.h>
@@ -33,6 +34,11 @@
 
 struct bxt_cyn_cb {
 	cynara_check_id id;
+
+	char *label;
+	char *sess;
+	char *uid;
+	char *priv;
 
 	struct bxt_client *cli;
 	buxton_cynara_callback callback;
@@ -74,6 +80,11 @@ static void free_cb(gpointer data)
 		cyn_cb->callback(cyn_cb->cli, BUXTON_CYNARA_CANCELED,
 				cyn_cb->user_data);
 	}
+
+	free(cyn_cb->label);
+	free(cyn_cb->sess);
+	free(cyn_cb->uid);
+	free(cyn_cb->priv);
 
 	free(cyn_cb);
 	bxt_dbg("Cynara: free %p", cyn_cb);
@@ -184,8 +195,13 @@ static void resp_cb(cynara_check_id id, cynara_async_call_cause cause,
 	}
 
 	if (res == BUXTON_CYNARA_DENIED) {
-		bxt_info("id %u denied%s", id,
+		bxt_info("'%s;%s;%s;%s' denied%s",
+				cyn_cb->label ? cyn_cb->label : "",
+				cyn_cb->sess ? cyn_cb->sess : "",
+				cyn_cb->uid ? cyn_cb->uid : "",
+				cyn_cb->priv ? cyn_cb->priv : "",
 				cynara_skip ? "(ignored)" : "");
+
 		if (cynara_skip)
 			res = BUXTON_CYNARA_ALLOWED;
 	}
@@ -227,11 +243,14 @@ static enum buxton_cynara_res check_server(struct bxt_client *client,
 		return BUXTON_CYNARA_ERROR;
 	}
 
-	bxt_info("'%s;%s;%s;%s' id %u", clabel, sess, uid, priv, cyn_cb->id);
-
 	cyn_cb->cli = client;
 	cyn_cb->callback = callback;
 	cyn_cb->user_data = user_data;
+
+	cyn_cb->label = strdup(clabel);
+	cyn_cb->sess = strdup(sess);
+	cyn_cb->uid = strdup(uid);
+	cyn_cb->priv = strdup(priv);
 
 	g_hash_table_insert(cynara_tbl, GUINT_TO_POINTER(cyn_cb->id), cyn_cb);
 	bxt_dbg("Cynara: %p added", cyn_cb);
