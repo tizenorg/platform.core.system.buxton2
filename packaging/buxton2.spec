@@ -90,6 +90,10 @@ Buxton wrapper library for providing vconf APIs (devel)
 cp %{SOURCE1001} .
 
 %build
+# for Address space layout randomization
+export CFLAGS="$CFLAGS -fPIE"
+export LDFLAGS="$LDFLAGS -pie"
+
 %cmake -DVERSION=%{version} \
 	-DCONFPATH:PATH=%{_sysconfdir}/%{name}.conf \
 	-DMODULE_DIR:PATH=%{_libdir}/%{name} \
