@@ -91,13 +91,13 @@ static struct buxton_value *arg_to_val(const char *atype, const char *arg)
 		val = buxton_value_create_double(d);
 		break;
 	case BUXTON_TYPE_BOOLEAN:
-		if (!strcasecmp(arg, "true")) {
+		if (!strcasecmp(arg, "true"))
 			b = 1;
-		} else if (!strcasecmp(arg, "false")) {
+		else if (!strcasecmp(arg, "false"))
 			b = 0;
-		} else {
+		else
 			b = strtol(arg, NULL, 0);
-		}
+
 		printf("Boolean [%s]\n", b ? "True" : "False");
 		val = buxton_value_create_boolean(b);
 		break;

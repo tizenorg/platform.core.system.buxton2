@@ -869,7 +869,7 @@ EXPORT int vconf_keylist_add_bool(keylist_t *keylist,
 }
 
 EXPORT int vconf_keylist_add_dbl(keylist_t *keylist,
-                const char *keyname, double value)
+		const char *keyname, double value)
 {
 	struct _keynode_t *keynode;
 
@@ -892,7 +892,7 @@ EXPORT int vconf_keylist_add_dbl(keylist_t *keylist,
 }
 
 EXPORT int vconf_keylist_add_str(keylist_t *keylist,
-                const char *keyname, const char *value)
+		const char *keyname, const char *value)
 {
 	struct _keynode_t *keynode;
 	char *s;
@@ -930,7 +930,7 @@ EXPORT int vconf_keylist_del(keylist_t *keylist, const char *keyname)
 		return -1;
 	}
 
-	keynode= find_keynode(keylist, keyname);
+	keynode = find_keynode(keylist, keyname);
 	if (!keynode) {
 		errno = ENOENT;
 		return -1;
@@ -1031,7 +1031,7 @@ static struct _keynode_t *alloc_keynode(struct buxton_layer *layer,
 }
 
 EXPORT int vconf_get(keylist_t *keylist,
-                const char *in_parentDIR, get_option_t option)
+		const char *in_parentDIR, get_option_t option)
 {
 	int r;
 	char **names;
@@ -1131,7 +1131,7 @@ EXPORT int vconf_set(keylist_t *keylist)
 }
 
 EXPORT int vconf_keylist_lookup(keylist_t *keylist, const char *keyname,
-                keynode_t **return_node)
+		keynode_t **return_node)
 {
 	struct _keynode_t *keynode;
 
