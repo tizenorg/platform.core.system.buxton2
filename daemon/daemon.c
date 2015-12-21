@@ -769,6 +769,7 @@ static gboolean accept_cb(gint fd, GIOCondition cond, gpointer data)
 
 	bxt_dbg("Accept: fd %d cond %x", fd, cond);
 
+	addrlen = sizeof(sa);
 	cfd = accept(fd, (struct sockaddr *)&sa, &addrlen);
 	if (cfd == -1) {
 		if (errno == EMFILE) {
