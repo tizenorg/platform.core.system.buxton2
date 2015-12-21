@@ -930,7 +930,7 @@ EXPORT int vconf_keylist_del(keylist_t *keylist, const char *keyname)
 		return -1;
 	}
 
-	keynode= find_keynode(keylist, keyname);
+	keynode = find_keynode(keylist, keyname);
 	if (!keynode) {
 		errno = ENOENT;
 		return -1;
