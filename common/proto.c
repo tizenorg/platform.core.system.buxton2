@@ -355,7 +355,7 @@ int proto_send_block(int fd, enum message_type type, uint8_t *data, int32_t len)
 
 		memcpy(hdr->data, &data[sent], hdr->len);
 
-		r = send(fd, hdr, sizeof(*hdr) + hdr->len, 0);
+		r = send(fd, hdr, sizeof(*hdr) + hdr->len, MSG_NOSIGNAL);
 		if (r == -1) {
 			bxt_err("send: fd %d errno %d", fd, errno);
 			return -1;
@@ -421,7 +421,7 @@ int proto_send(int fd, enum message_type type, uint8_t *data, int32_t len)
 		}
 	} while (r < 0);
 
-	r = send(fd, buf, sizeof(*hdr) + len, 0);
+	r = send(fd, buf, sizeof(*hdr) + len, MSG_NOSIGNAL);
 
 	free(buf);
 
