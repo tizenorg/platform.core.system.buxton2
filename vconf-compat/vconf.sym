@@ -23,9 +23,15 @@ VCONF_BUXTON_1.0 {
 		vconf_keylist_add_bool;
 		vconf_keylist_add_dbl;
 		vconf_keylist_add_str;
+		vconf_keylist_add_null;
 		vconf_keylist_del;
+		vconf_keylist_nextnode;
+		vconf_keylist_rewind;
 		vconf_get;
 		vconf_set;
+		vconf_unset;
+		vconf_unset_recursive;
+		vconf_sync_key;
 		vconf_keylist_lookup;
 	local:
 		*;
