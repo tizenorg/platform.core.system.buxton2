@@ -50,17 +50,6 @@ struct noti_cb {
 	gboolean deleted;
 };
 
-struct _keynode_t {
-	char *keyname;
-	int type;
-	union {
-		int i;
-		int b;
-		double d;
-		char *s;
-	} value;
-};
-
 EXPORT char *vconf_keynode_get_name(keynode_t *keynode)
 {
 	if (!keynode || !keynode->keyname) {
@@ -744,6 +733,7 @@ EXPORT int vconf_get_ext_errno(void)
 
 struct _keylist_t {
 	GList *list; /* struct _keynode_t list */
+	GList *cursor;
 };
 
 EXPORT keylist_t *vconf_keylist_new(void)
@@ -818,6 +808,7 @@ static struct _keynode_t *get_keynode(struct _keylist_t *keylist,
 	}
 
 	keylist->list = g_list_append(keylist->list, keynode);
+	keylist->cursor = g_list_last(keylist->list);
 
 	return keynode;
 }
@@ -842,7 +833,7 @@ EXPORT int vconf_keylist_add_int(keylist_t *keylist,
 	keynode->type = VCONF_TYPE_INT;
 	keynode->value.i = value;
 
-	return 0;
+	return g_list_length(keylist->list);
 }
 
 EXPORT int vconf_keylist_add_bool(keylist_t *keylist,
@@ -865,7 +856,7 @@ EXPORT int vconf_keylist_add_bool(keylist_t *keylist,
 	keynode->type = VCONF_TYPE_BOOL;
 	keynode->value.b = value;
 
-	return 0;
+	return g_list_length(keylist->list);
 }
 
 EXPORT int vconf_keylist_add_dbl(keylist_t *keylist,
@@ -888,7 +879,7 @@ EXPORT int vconf_keylist_add_dbl(keylist_t *keylist,
 	keynode->type = VCONF_TYPE_DOUBLE;
 	keynode->value.d = value;
 
-	return 0;
+	return g_list_length(keylist->list);
 }
 
 EXPORT int vconf_keylist_add_str(keylist_t *keylist,
@@ -918,7 +909,24 @@ EXPORT int vconf_keylist_add_str(keylist_t *keylist,
 	keynode->type = VCONF_TYPE_STRING;
 	keynode->value.s = s;
 
-	return 0;
+	return g_list_length(keylist->list);
+}
+
+EXPORT int vconf_keylist_add_null(keylist_t *keylist, const char *keyname)
+{
+	struct _keynode_t *keynode;
+
+	if (!keylist || !keyname) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	keynode = get_keynode(keylist, keyname);
+	if (!keynode) {
+		return -1;
+	}
+
+	return g_list_length(keylist->list);
 }
 
 EXPORT int vconf_keylist_del(keylist_t *keylist, const char *keyname)
@@ -938,6 +946,48 @@ EXPORT int vconf_keylist_del(keylist_t *keylist, const char *keyname)
 
 	keylist->list = g_list_remove(keylist->list, keynode);
 	free_keynode(keynode);
+
+	return 0;
+}
+
+EXPORT keynode_t *vconf_keylist_nextnode(keylist_t *keylist)
+{
+	keynode_t *node = NULL;
+	GList *next;
+
+	if (!keylist) {
+		errno = EINVAL;
+		return NULL;
+	}
+
+	next = g_list_next(keylist->cursor);
+	if (!next) {
+		next = g_list_first(keylist->cursor);
+	}
+
+	node = next->data;
+	keylist->cursor = next;
+
+	return node;
+}
+
+EXPORT int vconf_keylist_rewind(keylist_t *keylist)
+{
+	GList *first;
+
+	if (!keylist) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	first = g_list_first(keylist->cursor);
+
+	if (!first) {
+		errno = ENOENT;
+		return -1;
+	}
+
+	keylist->cursor = first;
 
 	return 0;
 }
@@ -1127,6 +1177,84 @@ EXPORT int vconf_set(keylist_t *keylist)
 
 	_close();
 
+	return 0;
+}
+
+EXPORT int vconf_unset(const char *in_key)
+{
+	int r;
+
+	if (!in_key) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	r = _open();
+	if (r == -1)
+		return -1;
+
+	r = buxton_unset_value_sync(client, get_layer(in_key), in_key);
+	if (r == -1)
+		LOGE("unset value: key '%s' errno %d", in_key, errno);
+
+	_close();
+
+	return r;
+}
+
+EXPORT int vconf_unset_recursive(const char *in_dir)
+{
+	int r;
+	int i;
+	int dirlen;
+	char **names;
+	unsigned int len;
+	struct buxton_layer *layer;
+
+	if (!in_dir) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	dirlen = strlen(in_dir);
+	if (dirlen < 2) { /* minimum is "db" */
+		errno = EINVAL;
+		return -1;
+	}
+
+	r = _open();
+	if (r == -1)
+		return -1;
+
+	layer = get_layer(in_dir);
+
+	r = buxton_list_keys_sync(client, layer, &names, &len);
+	if (r == -1) {
+		LOGE("get key list: errno %d", errno);
+		_close();
+		return -1;
+	}
+
+	for (i = 0; i < len; i++) {
+		if (strncmp(in_dir, names[i], dirlen))
+			continue;
+
+		r = vconf_unset(names[i]);
+		if (r == -1) {
+			buxton_free_keys(names);
+			_close();
+			return -1;
+		}
+	}
+
+	buxton_free_keys(names);
+	_close();
+
+	return 0;
+}
+
+EXPORT int vconf_sync_key(const char *in_key)
+{
 	return 0;
 }
 
