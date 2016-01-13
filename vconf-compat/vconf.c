@@ -20,6 +20,9 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdbool.h>
+#include <unistd.h>
+#include <sys/types.h>
 
 #include <glib.h>
 
@@ -50,16 +53,7 @@ struct noti_cb {
 	gboolean deleted;
 };
 
-struct _keynode_t {
-	char *keyname;
-	int type;
-	union {
-		int i;
-		int b;
-		double d;
-		char *s;
-	} value;
-};
+static bool last_result;
 
 EXPORT char *vconf_keynode_get_name(keynode_t *keynode)
 {
@@ -512,6 +506,7 @@ EXPORT int vconf_set_int(const char *key, int intval)
 {
 	int r;
 	struct buxton_value *val;
+	last_result = false;
 
 	if (!key) {
 		errno = EINVAL;
@@ -525,6 +520,7 @@ EXPORT int vconf_set_int(const char *key, int intval)
 	r = _vconf_set(key, val);
 
 	buxton_value_free(val);
+	last_result = true;
 
 	return r;
 }
@@ -533,6 +529,7 @@ EXPORT int vconf_set_bool(const char *key, int boolval)
 {
 	int r;
 	struct buxton_value *val;
+	last_result = false;
 
 	if (!key) {
 		errno = EINVAL;
@@ -546,6 +543,7 @@ EXPORT int vconf_set_bool(const char *key, int boolval)
 	r = _vconf_set(key, val);
 
 	buxton_value_free(val);
+	last_result = true;
 
 	return r;
 }
@@ -554,6 +552,7 @@ EXPORT int vconf_set_str(const char *key, const char *strval)
 {
 	int r;
 	struct buxton_value *val;
+	last_result = false;
 
 	if (!key || !strval) {
 		errno = EINVAL;
@@ -567,6 +566,7 @@ EXPORT int vconf_set_str(const char *key, const char *strval)
 	r = _vconf_set(key, val);
 
 	buxton_value_free(val);
+	last_result = true;
 
 	return r;
 }
@@ -575,6 +575,7 @@ EXPORT int vconf_set_dbl(const char *key, double dblval)
 {
 	int r;
 	struct buxton_value *val;
+	last_result = false;
 
 	if (!key) {
 		errno = EINVAL;
@@ -588,6 +589,7 @@ EXPORT int vconf_set_dbl(const char *key, double dblval)
 	r = _vconf_set(key, val);
 
 	buxton_value_free(val);
+	last_result = true;
 
 	return r;
 }
@@ -634,6 +636,7 @@ EXPORT int vconf_get_int(const char *key, int *intval)
 	int r;
 	struct buxton_value *val;
 	int32_t i;
+	last_result = false;
 
 	if (!key || !intval) {
 		errno = EINVAL;
@@ -652,6 +655,7 @@ EXPORT int vconf_get_int(const char *key, int *intval)
 		return -1;
 
 	*intval = i;
+	last_result = true;
 
 	return 0;
 }
@@ -661,6 +665,8 @@ EXPORT int vconf_get_bool(const char *key, int *boolval)
 	int r;
 	struct buxton_value *val;
 	int32_t b;
+	last_result = false;
+
 
 	if (!key || !boolval) {
 		errno = EINVAL;
@@ -679,6 +685,7 @@ EXPORT int vconf_get_bool(const char *key, int *boolval)
 		return -1;
 
 	*boolval = b;
+	last_result = true;
 
 	return 0;
 }
@@ -689,6 +696,7 @@ EXPORT char *vconf_get_str(const char *key)
 	struct buxton_value *val;
 	const char *s;
 	char *str;
+	last_result = false;
 
 	if (!key) {
 		errno = EINVAL;
@@ -706,6 +714,7 @@ EXPORT char *vconf_get_str(const char *key)
 	str = s ? strdup(s) : NULL;
 
 	buxton_value_free(val);
+	last_result = true;
 
 	return str;
 }
@@ -715,6 +724,7 @@ EXPORT int vconf_get_dbl(const char *key, double *dblval)
 	int r;
 	struct buxton_value *val;
 	double d;
+	last_result = false;
 
 	if (!key || !dblval) {
 		errno = EINVAL;
@@ -733,17 +743,46 @@ EXPORT int vconf_get_dbl(const char *key, double *dblval)
 		return -1;
 
 	*dblval = d;
+	last_result = true;
 
 	return 0;
 }
 
 EXPORT int vconf_get_ext_errno(void)
 {
-	return errno * -1;
+	int ret;
+
+	if (last_result)
+		return VCONF_OK;
+
+	switch(errno) {
+	case ENOENT:
+		ret = VCONF_ERROR_FILE_NO_ENT;
+		break;
+	case ENOMEM:
+	case ENOSPC:
+		ret = VCONF_ERROR_FILE_NO_MEM;
+		break;
+	case EAGAIN:
+	case ETIMEDOUT:
+	case EBUSY:
+	case EMFILE:
+		ret = VCONF_ERROR_FILE_BUSY;
+		break;
+	case EACCES:
+	case EPERM:
+		ret = VCONF_ERROR_FILE_PERM;
+		break;
+	default:
+		ret = VCONF_ERROR;
+	}
+
+	return ret;
 }
 
 struct _keylist_t {
 	GList *list; /* struct _keynode_t list */
+	GList *cursor;
 };
 
 EXPORT keylist_t *vconf_keylist_new(void)
@@ -818,6 +857,7 @@ static struct _keynode_t *get_keynode(struct _keylist_t *keylist,
 	}
 
 	keylist->list = g_list_append(keylist->list, keynode);
+	keylist->cursor = g_list_last(keylist->list);
 
 	return keynode;
 }
@@ -842,7 +882,7 @@ EXPORT int vconf_keylist_add_int(keylist_t *keylist,
 	keynode->type = VCONF_TYPE_INT;
 	keynode->value.i = value;
 
-	return 0;
+	return g_list_length(keylist->list);
 }
 
 EXPORT int vconf_keylist_add_bool(keylist_t *keylist,
@@ -865,7 +905,7 @@ EXPORT int vconf_keylist_add_bool(keylist_t *keylist,
 	keynode->type = VCONF_TYPE_BOOL;
 	keynode->value.b = value;
 
-	return 0;
+	return g_list_length(keylist->list);
 }
 
 EXPORT int vconf_keylist_add_dbl(keylist_t *keylist,
@@ -888,7 +928,7 @@ EXPORT int vconf_keylist_add_dbl(keylist_t *keylist,
 	keynode->type = VCONF_TYPE_DOUBLE;
 	keynode->value.d = value;
 
-	return 0;
+	return g_list_length(keylist->list);
 }
 
 EXPORT int vconf_keylist_add_str(keylist_t *keylist,
@@ -918,7 +958,24 @@ EXPORT int vconf_keylist_add_str(keylist_t *keylist,
 	keynode->type = VCONF_TYPE_STRING;
 	keynode->value.s = s;
 
-	return 0;
+	return g_list_length(keylist->list);
+}
+
+EXPORT int vconf_keylist_add_null(keylist_t *keylist, const char *keyname)
+{
+	struct _keynode_t *keynode;
+
+	if (!keylist || !keyname) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	keynode = get_keynode(keylist, keyname);
+	if (!keynode) {
+		return -1;
+	}
+
+	return g_list_length(keylist->list);
 }
 
 EXPORT int vconf_keylist_del(keylist_t *keylist, const char *keyname)
@@ -938,6 +995,48 @@ EXPORT int vconf_keylist_del(keylist_t *keylist, const char *keyname)
 
 	keylist->list = g_list_remove(keylist->list, keynode);
 	free_keynode(keynode);
+
+	return 0;
+}
+
+EXPORT keynode_t *vconf_keylist_nextnode(keylist_t *keylist)
+{
+	keynode_t *node = NULL;
+	GList *next;
+
+	if (!keylist) {
+		errno = EINVAL;
+		return NULL;
+	}
+
+	next = g_list_next(keylist->cursor);
+	if (!next) {
+		next = g_list_first(keylist->cursor);
+	}
+
+	node = next->data;
+	keylist->cursor = next;
+
+	return node;
+}
+
+EXPORT int vconf_keylist_rewind(keylist_t *keylist)
+{
+	GList *l;
+
+	if (!keylist) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	l = g_list_last(keylist->cursor);
+
+	if (!l) {
+		errno = ENOENT;
+		return -1;
+	}
+
+	keylist->cursor = l;
 
 	return 0;
 }
@@ -1128,6 +1227,107 @@ EXPORT int vconf_set(keylist_t *keylist)
 	_close();
 
 	return 0;
+}
+
+EXPORT int vconf_unset(const char *in_key)
+{
+	int r;
+	if (getuid() != 0)
+		return VCONF_ERROR_NOT_SUPPORTED;
+
+	if (!in_key) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	r = _open();
+	if (r == -1)
+		return -1;
+
+	r = buxton_unset_value_sync(client, get_layer(in_key), in_key);
+	if (r == -1)
+		LOGE("unset value: key '%s' errno %d", in_key, errno);
+
+	_close();
+
+	return r;
+}
+
+EXPORT int vconf_unset_recursive(const char *in_dir)
+{
+	int r;
+	int i;
+	int dirlen;
+	char **names;
+	unsigned int len;
+	struct buxton_layer *layer;
+
+	if (getuid() != 0)
+		return VCONF_ERROR_NOT_SUPPORTED;
+
+	if (!in_dir) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	dirlen = strlen(in_dir);
+	if (dirlen < 2) { /* minimum is "db" */
+		errno = EINVAL;
+		return -1;
+	}
+
+	r = _open();
+	if (r == -1)
+		return -1;
+
+	layer = get_layer(in_dir);
+
+	r = buxton_list_keys_sync(client, layer, &names, &len);
+	if (r == -1) {
+		LOGE("get key list: errno %d", errno);
+		_close();
+		return -1;
+	}
+
+	for (i = 0; i < len; i++) {
+		if (strncmp(in_dir, names[i], dirlen))
+			continue;
+
+		r = vconf_unset(names[i]);
+		if (r == -1) {
+			buxton_free_keys(names);
+			_close();
+			return -1;
+		}
+	}
+
+	buxton_free_keys(names);
+	_close();
+
+	return 0;
+}
+
+EXPORT int vconf_sync_key(const char *in_key)
+{
+	int r;
+	struct buxton_value *v;
+
+	assert(in_key);
+
+	r = _open();
+	if (r == -1)
+		return -1;
+
+	r = buxton_get_value_sync(client, get_layer(in_key), in_key, &v);
+	if (r == -1) {
+		LOGE("get value: key '%s'", in_key);
+	} else {
+		r = 0;
+	}
+
+	_close();
+
+	return r;
 }
 
 EXPORT int vconf_keylist_lookup(keylist_t *keylist, const char *keyname,
