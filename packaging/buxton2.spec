@@ -12,6 +12,7 @@ Source4:        %{name}.tmpfiles.conf
 Source1001:     %{name}.manifest
 BuildRequires:  cmake
 BuildRequires:  gdbm-devel
+BuildRequires:  pkgconfig(gio-2.0)
 BuildRequires:  pkgconfig(glib-2.0)
 BuildRequires:  pkgconfig(libsystemd)
 BuildRequires:  pkgconfig(cynara-client-async)

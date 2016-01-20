@@ -1,6 +1,6 @@
 # buxton2d build
 
-PKG_CHECK_MODULES(D_PKGS REQUIRED libsystemd cynara-client-async)
+PKG_CHECK_MODULES(D_PKGS REQUIRED libsystemd cynara-client-async gio-2.0 glib-2.0)
 
 FOREACH(flag ${D_PKGS_CFLAGS})
 	SET(DAEMON_CFLAGS "${DAEMON_CFLAGS} ${flag}")
@@ -13,6 +13,7 @@ SET(SRC main.c
 	daemon.c
 	socks.c
 	cynara.c
+	dbus.c
 	../common/common.c
 	../common/config.c
 	../common/backends.c

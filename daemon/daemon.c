@@ -38,6 +38,7 @@
 #include "daemon.h"
 #include "socks.h"
 #include "cynara.h"
+#include "dbus.h"
 
 struct bxt_noti {
 	char *layer_key;
@@ -834,6 +835,7 @@ static void bxt_exit(struct bxt_daemon *bxtd)
 		close(bxtd->sk);
 
 	direct_exit();
+	buxton_dbus_exit();
 
 	if (bxtd->sigfd != -1)
 		close(bxtd->sigfd);
@@ -869,6 +871,10 @@ static int bxt_init(struct bxt_daemon *bxtd, const char *confpath)
 	bxtd->sk_id = g_unix_fd_add(bxtd->sk, G_IO_IN, accept_cb, bxtd);
 
 	buxton_cynara_init();
+
+	r = buxton_dbus_init();
+	if (r == -1)
+		return -1;
 
 	bxtd->loop = g_main_loop_new(NULL, FALSE);
 
