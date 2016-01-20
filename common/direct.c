@@ -22,6 +22,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <glib.h>
 
@@ -510,6 +511,24 @@ int direct_set_priv(const struct buxton_layer *layer,
 		return -1;
 
 	return 0;
+}
+
+void direct_remove_user_memory(uid_t uid)
+{
+	char path[FILENAME_MAX];
+	const struct layer *ly;
+
+	ly = conf_get_layer("user-memory");
+	if (!ly)
+		return;
+
+	if (get_path(uid, BUXTON_LAYER_NORMAL, ly, path, sizeof(path)))
+		return;
+
+	if (!access(path, F_OK)) {
+		if (remove(path))
+			bxt_err("remote user memory db failed");
+	}
 }
 
 void direct_exit(void)
