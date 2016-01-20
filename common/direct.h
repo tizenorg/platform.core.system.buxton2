@@ -42,3 +42,4 @@ int direct_get_priv(const struct buxton_layer *layer,
 int direct_set_priv(const struct buxton_layer *layer,
 		const char *key, enum buxton_priv_type type, const char *priv);
 
+int direct_remove_db(const struct buxton_layer *layer);

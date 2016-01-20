@@ -22,6 +22,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <glib.h>
 
@@ -508,6 +509,44 @@ int direct_set_priv(const struct buxton_layer *layer,
 
 	if (r == -1)
 		return -1;
+
+	return 0;
+}
+
+int direct_remove_db(const struct buxton_layer *layer)
+{
+	int r;
+	const struct layer *ly;
+	const struct backend *backend;
+	char path[FILENAME_MAX];
+
+	if (!layer) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	ly = conf_get_layer(layer->name);
+	if (!ly)
+		return -1;
+
+	backend = backend_get(ly->backend);
+	assert(backend);
+
+	if (!backend->remove_db) {
+		bxt_err("Remove db : backend '%s' has no remove_db func",
+				backend->name);
+		return -1;
+	}
+
+	r = get_path(layer->uid, layer->type, ly, path, sizeof(path));
+	if (r == -1)
+		return -1;
+
+	r = backend->remove_db(path);
+	if (r == -1) {
+		bxt_err("remote user memory db failed");
+		return -1;
+	}
 
 	return 0;
 }
