@@ -605,7 +605,7 @@ static int check_priv(struct bxt_client *cli, struct request *rqst)
 		bxt_dbg("priv '%s'", priv);
 
 		r = buxton_cynara_check(cli, cli->label, "", cli->cred.uid,
-				priv, cyn_cb, rqst);
+				priv, cli->cred.pid, rqst->key, cyn_cb, rqst);
 		free(priv);
 		break;
 	default:

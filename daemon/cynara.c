@@ -40,6 +40,9 @@ struct bxt_cyn_cb {
 	char *uid;
 	char *priv;
 
+	int pid;
+	char *key;
+
 	struct bxt_client *cli;
 	buxton_cynara_callback callback;
 	void *user_data;
@@ -85,6 +88,7 @@ static void free_cb(gpointer data)
 	free(cyn_cb->sess);
 	free(cyn_cb->uid);
 	free(cyn_cb->priv);
+	free(cyn_cb->key);
 
 	free(cyn_cb);
 	bxt_dbg("Cynara: free %p", cyn_cb);
@@ -195,10 +199,12 @@ static void resp_cb(cynara_check_id id, cynara_async_call_cause cause,
 	}
 
 	if (res == BUXTON_CYNARA_DENIED) {
-		bxt_info("'%s;%s;%s;%s' denied%s",
+		bxt_info("'%d;%s;%s;%s;%s;%s' denied%s",
+				cyn_cb->pid,
 				cyn_cb->label ? cyn_cb->label : "",
 				cyn_cb->sess ? cyn_cb->sess : "",
 				cyn_cb->uid ? cyn_cb->uid : "",
+				cyn_cb->key ? cyn_cb->key : "",
 				cyn_cb->priv ? cyn_cb->priv : "",
 				cynara_skip ? "(ignored)" : "");
 
@@ -216,6 +222,7 @@ static void resp_cb(cynara_check_id id, cynara_async_call_cause cause,
 static enum buxton_cynara_res check_server(struct bxt_client *client,
 		const char *clabel, const char *sess,
 		const char *uid, const char *priv,
+		int pid, const char *key,
 		buxton_cynara_callback callback, void *user_data)
 {
 	int r;
@@ -247,6 +254,9 @@ static enum buxton_cynara_res check_server(struct bxt_client *client,
 	cyn_cb->callback = callback;
 	cyn_cb->user_data = user_data;
 
+	cyn_cb->pid = pid;
+	cyn_cb->key = strdup(key);
+
 	cyn_cb->label = strdup(clabel);
 	cyn_cb->sess = strdup(sess);
 	cyn_cb->uid = strdup(uid);
@@ -261,6 +271,7 @@ static enum buxton_cynara_res check_server(struct bxt_client *client,
 enum buxton_cynara_res buxton_cynara_check(struct bxt_client *client,
 		const char *client_label, const char *session,
 		uid_t uid, const char *priv,
+		int pid, const char *key,
 		buxton_cynara_callback callback, void *user_data)
 {
 	int r;
@@ -292,8 +303,8 @@ enum buxton_cynara_res buxton_cynara_check(struct bxt_client *client,
 	if (r != BUXTON_CYNARA_UNKNOWN) {
 		/* r should be ALLOWED or DENIED */
 		if (r == BUXTON_CYNARA_DENIED) {
-			bxt_info("'%s;%s;%s;%s' denied%s",
-					client_label, session, uid_str, priv,
+			bxt_info("'%d;%s;%s;%s;%s;%s' denied%s",
+					pid, client_label, session, uid_str, key, priv,
 					cynara_skip ? "(ignored)" : "");
 			if (cynara_skip)
 				r = BUXTON_CYNARA_ALLOWED;
@@ -302,7 +313,7 @@ enum buxton_cynara_res buxton_cynara_check(struct bxt_client *client,
 	}
 
 	return check_server(client, client_label, session, uid_str, priv,
-			callback, user_data);
+			pid, key, callback, user_data);
 }
 
 void buxton_cynara_cancel(struct bxt_client *client)

@@ -40,6 +40,7 @@ typedef void (*buxton_cynara_callback)(struct bxt_client *client,
 enum buxton_cynara_res buxton_cynara_check(struct bxt_client *client,
 		const char *client_label, const char *session,
 		uid_t uid, const char *priv,
+		int pid, const char *key,
 		buxton_cynara_callback callback, void *user_data);
 
 void buxton_cynara_cancel(struct bxt_client *client);
