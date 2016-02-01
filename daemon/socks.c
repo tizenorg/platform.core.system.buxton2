@@ -177,6 +177,7 @@ int sock_get_client_cred(int fd, struct ucred *cred)
 
 int sock_get_client_label(int fd, char **label)
 {
+	char dummy;
 	int r;
 	socklen_t len;
 	char *l;
@@ -192,22 +193,15 @@ int sock_get_client_label(int fd, char **label)
 	}
 
 	len = 0;
-	r = getsockopt(fd, SOL_SOCKET, SO_PEERSEC, NULL, &len);
-	if (r == 0) {
-		/* Never reach here */
-		bxt_err("Client %d: get SO_PEERSEC: 0", fd);
-		*label = NULL;
-		smack_not_supported = 1;
-		return 0;
-	}
+	r = getsockopt(fd, SOL_SOCKET, SO_PEERSEC, &dummy, &len);
 
-	if (errno == ENOPROTOOPT) {
-		smack_not_supported = 1;
-		*label = NULL;
-		return 0;
-	}
-
-	if (errno != ERANGE) {
+	if (r < 0 && errno != ERANGE) {
+		if (errno == ENOPROTOOPT) {
+			bxt_err("Client %d: get SO_PEERSEC: 0", fd);
+			*label = NULL;
+			smack_not_supported = 1;
+			return 0;
+		}
 		bxt_err("Client %d: get SO_PEERSEC: %d", fd, errno);
 		return -1;
 	}
