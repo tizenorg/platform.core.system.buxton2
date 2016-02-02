@@ -36,14 +36,19 @@
 
 #define LOGE(fmt, ...) fprintf(stderr, fmt "\n", ##__VA_ARGS__)
 
+#define USER_MIN 5000
+
 static int _refcnt;
 static struct buxton_client *client;
 static struct buxton_layer *system_layer;
 static struct buxton_layer *memory_layer;
+static struct buxton_layer *user_layer;
+static struct buxton_layer *user_memory_layer;
 static GHashTable *noti_tbl;
 
 struct noti {
 	char *key;
+	bool user;
 	GList *noti_list; /* struct noti_cb list */
 };
 
@@ -135,12 +140,19 @@ EXPORT char *vconf_keynode_get_str(keynode_t *keynode)
 	return keynode->value.s;
 }
 
-static struct buxton_layer *get_layer(const char *key)
+static struct buxton_layer *get_layer(const char *key, bool user)
 {
-	if (key && !strncmp(key, "memory/", strlen("memory/")))
-		return memory_layer;
+	if (key && !strncmp(key, "memory/", strlen("memory/"))) {
+		if (user)
+			return user_memory_layer;
+		else
+			return memory_layer;
+	}
 
-	return system_layer;
+	if (user)
+		return user_layer;
+	else
+		return system_layer;
 }
 
 static gboolean free_noti_cb(gpointer data)
@@ -194,6 +206,12 @@ static void _close(void)
 	buxton_free_layer(memory_layer);
 	memory_layer = NULL;
 
+	buxton_free_layer(user_layer);
+	memory_layer = NULL;
+
+	buxton_free_layer(user_memory_layer);
+	memory_layer = NULL;
+
 	g_hash_table_destroy(noti_tbl);
 	noti_tbl = NULL;
 
@@ -220,6 +238,8 @@ static int _open(void)
 
 	system_layer = buxton_create_layer("system");
 	memory_layer = buxton_create_layer("memory");
+	user_layer = buxton_create_layer("user");
+	user_memory_layer = buxton_create_layer("user-memory");
 
 	return 0;
 }
@@ -358,6 +378,7 @@ static int add_noti(struct noti *noti, vconf_callback_fn cb, void *user_data)
 
 static int register_noti(const char *key, vconf_callback_fn cb, void *user_data)
 {
+	struct buxton_value *v;
 	int r;
 	struct noti *noti;
 
@@ -381,8 +402,22 @@ static int register_noti(const char *key, vconf_callback_fn cb, void *user_data)
 		return -1;
 	}
 
-	r = buxton_register_notification_sync(client, get_layer(key), key,
-			notify_cb, noti);
+	r = -1;
+	if (getuid() >= USER_MIN) {
+		r = buxton_get_value_sync(client, get_layer(key, true), key, &v);
+		buxton_value_free(v);
+	}
+
+	if (r == -1) {
+		noti->user = false;
+		r = buxton_register_notification_sync(client, get_layer(key, false),
+				key, notify_cb, noti);
+	} else {
+		noti->user = true;
+		r = buxton_register_notification_sync(client, get_layer(key, true),
+				key, notify_cb, noti);
+	}
+
 	if (r == -1) {
 		LOGE("vconf_notify_key_changed: key '%s' add notify error %d",
 				key, errno);
@@ -442,8 +477,10 @@ static int unregister_noti(struct noti *noti)
 	if (cnt > 0)
 		return 0;
 
-	r = buxton_unregister_notification_sync(client, get_layer(noti->key),
+	r = buxton_unregister_notification_sync(client,
+			get_layer(noti->key, noti->user),
 			noti->key, notify_cb);
+
 	if (r == -1)
 		LOGE("unregister error '%s' %d", noti->key, errno);
 
@@ -485,6 +522,7 @@ EXPORT int vconf_ignore_key_changed(const char *key, vconf_callback_fn cb)
 static int _vconf_set(const char *key, const struct buxton_value *val)
 {
 	int r;
+	struct buxton_value *v;
 
 	assert(key);
 	assert(val);
@@ -493,7 +531,17 @@ static int _vconf_set(const char *key, const struct buxton_value *val)
 	if (r == -1)
 		return -1;
 
-	r = buxton_set_value_sync(client, get_layer(key), key, val);
+	r = -1;
+	if (getuid() >= USER_MIN) {
+		r = buxton_get_value_sync(client, get_layer(key, true), key, &v);
+		buxton_value_free(v);
+	}
+
+	if (r == -1)
+		r = buxton_set_value_sync(client, get_layer(key, false), key, val);
+	else
+		r = buxton_set_value_sync(client, get_layer(key, true), key, val);
+
 	if (r == -1)
 		LOGE("set value: key '%s' errno %d", key, errno);
 
@@ -607,7 +655,12 @@ static int _vconf_get(const char *key, enum buxton_key_type type,
 	if (r == -1)
 		return -1;
 
-	r = buxton_get_value_sync(client, get_layer(key), key, &v);
+	r = -1;
+	if (getuid() >= USER_MIN) {
+		r = buxton_get_value_sync(client, get_layer(key, true), key, &v);
+	if (r == -1)
+		r = buxton_get_value_sync(client, get_layer(key, false), key, &v);
+
 	if (r == -1) {
 		LOGE("get value: key '%s' errno %d", key, errno);
 	} else {
@@ -1154,7 +1207,7 @@ EXPORT int vconf_get(keylist_t *keylist,
 	if (r == -1)
 		return -1;
 
-	layer = get_layer(in_parentDIR);
+	layer = get_layer(in_parentDIR, false);
 
 	r = buxton_list_keys_sync(client, layer, &names, &len);
 	if (r == -1) {
@@ -1232,6 +1285,8 @@ EXPORT int vconf_set(keylist_t *keylist)
 EXPORT int vconf_unset(const char *in_key)
 {
 	int r;
+	struct buxton_value *v;
+
 	if (getuid() != 0)
 		return VCONF_ERROR_NOT_SUPPORTED;
 
@@ -1244,7 +1299,8 @@ EXPORT int vconf_unset(const char *in_key)
 	if (r == -1)
 		return -1;
 
-	r = buxton_unset_value_sync(client, get_layer(in_key), in_key);
+	r = buxton_unset_value_sync(client, get_layer(in_key, false), in_key);
+
 	if (r == -1)
 		LOGE("unset value: key '%s' errno %d", in_key, errno);
 
@@ -1280,7 +1336,7 @@ EXPORT int vconf_unset_recursive(const char *in_dir)
 	if (r == -1)
 		return -1;
 
-	layer = get_layer(in_dir);
+	layer = get_layer(in_dir, false);
 
 	r = buxton_list_keys_sync(client, layer, &names, &len);
 	if (r == -1) {
@@ -1318,12 +1374,18 @@ EXPORT int vconf_sync_key(const char *in_key)
 	if (r == -1)
 		return -1;
 
-	r = buxton_get_value_sync(client, get_layer(in_key), in_key, &v);
-	if (r == -1) {
+	r = -1;
+	if (getuid() >= USER_MIN) {
+		r = buxton_get_value_sync(client,
+				get_layer(in_key, true), in_key, &v);
+	if (r == -1)
+		r = buxton_get_value_sync(client,
+				get_layer(in_key, false), in_key, &v);
+
+	if (r == -1)
 		LOGE("get value: key '%s'", in_key);
-	} else {
+	else
 		r = 0;
-	}
 
 	_close();
 
