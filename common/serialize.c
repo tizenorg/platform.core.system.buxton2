@@ -467,6 +467,8 @@ static int check_request(enum message_type type,
 		if (r == -1)
 			return -1;
 	case MSG_LIST:
+	case MSG_CYN_ON:
+	case MSG_CYN_OFF:
 		break;
 	default:
 		bxt_err("Serialize: message type is invalid: %d", type);
@@ -726,6 +728,8 @@ static int check_response(enum message_type type, int32_t res,
 	case MSG_UNNOTIFY:
 	case MSG_SET_WP:
 	case MSG_SET_RP:
+	case MSG_CYN_ON:
+	case MSG_CYN_OFF:
 		break;
 	case MSG_NOTI:
 		errno = ENOTSUP;
