@@ -503,6 +503,20 @@ static void proc_get_priv(struct bxt_client *cli,
 	resp->val = val;
 }
 
+static void proc_cyn_enable(struct bxt_client *cli,
+		struct request *rqst, struct response *resp)
+{
+	buxton_cynara_enable();
+	resp->res = 0;
+}
+
+static void proc_cyn_disable(struct bxt_client *cli,
+		struct request *rqst, struct response *resp)
+{
+	buxton_cynara_disable();
+	resp->res = 0;
+}
+
 typedef void (*proc_func)(struct bxt_client *cli,
 		struct request *, struct response *);
 
@@ -518,6 +532,8 @@ static proc_func proc_funcs[MSG_MAX] = {
 	[MSG_SET_RP] = proc_set_priv,
 	[MSG_GET_WP] = proc_get_priv,
 	[MSG_GET_RP] = proc_get_priv,
+	[MSG_CYN_ON] = proc_cyn_enable,
+	[MSG_CYN_OFF] = proc_cyn_disable,
 };
 
 static void proc_msg(struct bxt_client *cli,
@@ -680,6 +696,8 @@ static int proc_client_msg(struct bxt_client *cli)
 	case MSG_SET_RP:
 	case MSG_GET_WP:
 	case MSG_GET_RP:
+	case MSG_CYN_ON:
+	case MSG_CYN_OFF:
 		r = proc_serialized_msg(cli, data, len);
 		break;
 	case MSG_NOTI:

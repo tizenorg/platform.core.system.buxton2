@@ -52,6 +52,7 @@ static cynara_async *cynara;
 static int cynara_fd = -1;
 static guint cynara_fd_id;
 static gboolean cynara_skip;
+static gboolean permissive;
 static GHashTable *cynara_tbl;
 
 static void cyn_err(const char *prefix, int err)
@@ -206,9 +207,9 @@ static void resp_cb(cynara_check_id id, cynara_async_call_cause cause,
 				cyn_cb->uid ? cyn_cb->uid : "",
 				cyn_cb->key ? cyn_cb->key : "",
 				cyn_cb->priv ? cyn_cb->priv : "",
-				cynara_skip ? "(ignored)" : "");
+				permissive ? "(ignored)" : "");
 
-		if (cynara_skip)
+		if (permissive)
 			res = BUXTON_CYNARA_ALLOWED;
 	}
 
@@ -288,6 +289,9 @@ enum buxton_cynara_res buxton_cynara_check(struct bxt_client *client,
 		return BUXTON_CYNARA_ERROR;
 	}
 
+	if (cynara_skip)
+		return BUXTON_CYNARA_ALLOWED;
+
 	if (!*priv)
 		return BUXTON_CYNARA_ALLOWED;
 
@@ -305,8 +309,8 @@ enum buxton_cynara_res buxton_cynara_check(struct bxt_client *client,
 		if (r == BUXTON_CYNARA_DENIED) {
 			bxt_info("'%d;%s;%s;%s;%s;%s' denied%s",
 					pid, client_label, session, uid_str, key, priv,
-					cynara_skip ? "(ignored)" : "");
-			if (cynara_skip)
+					permissive ? "(ignored)" : "");
+			if (permissive)
 				r = BUXTON_CYNARA_ALLOWED;
 		}
 		return r;
@@ -332,6 +336,16 @@ void buxton_cynara_cancel(struct bxt_client *client)
 	}
 }
 
+void buxton_cynara_enable(void)
+{
+	cynara_skip = FALSE;
+}
+
+void buxton_cynara_disable(void)
+{
+	cynara_skip = TRUE;
+}
+
 int buxton_cynara_init(void)
 {
 	int r;
@@ -340,10 +354,12 @@ int buxton_cynara_init(void)
 	if (cynara)
 		return 0;
 
+	cynara_skip = FALSE;
+
 	skip = getenv(BUXTON_CYNARA_PERMISSIVE_MODE);
 	if (skip && skip[0] == '1') {
 		bxt_info("Permissive mode enabled");
-		cynara_skip = TRUE;
+		permissive = TRUE;
 	}
 
 	cynara_tbl = g_hash_table_new_full(NULL, NULL, NULL, free_cb);

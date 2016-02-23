@@ -662,6 +662,8 @@ static void proc_msg_cb(void *user_data,
 	case MSG_SET_RP:
 	case MSG_GET_WP:
 	case MSG_GET_RP:
+	case MSG_CYN_ON:
+	case MSG_CYN_OFF:
 		proc_msg_res(client, data, len);
 		break;
 	default:
@@ -1847,6 +1849,140 @@ EXPORT int buxton_get_privilege_sync(struct buxton_client *client,
 	*privilege = resp.val->value.s;
 	resp.val->value.s = NULL;
 	buxton_value_free(resp.val);
+
+	return 0;
+}
+
+static void security_sync_cb(int status, const struct buxton_layer *layer,
+		const char *key, const struct buxton_value *val,
+		void *user_data)
+{
+	struct response *resp = user_data;
+
+	assert(resp);
+
+	resp->res = status;
+}
+
+static struct bxt_req *security_control(struct buxton_client *client,
+		enum message_type type,
+		buxton_response_callback callback, void *user_data)
+{
+	int r;
+	struct bxt_req *req;
+	struct request rqst;
+
+	if (!client) {
+		errno = EINVAL;
+		return NULL;
+	}
+
+	req = create_req(layer_create("dummy"), NULL, callback,
+			NULL, user_data);
+	if (!req)
+		return NULL;
+
+	memset(&rqst, 0, sizeof(rqst));
+	rqst.type = type;
+	rqst.msgid = req->msgid;
+	rqst.layer = req->layer;
+
+	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
+
+	r = send_req(client, &rqst);
+	if (r == -1) {
+		g_hash_table_remove(client->req_cbs,
+				GUINT_TO_POINTER(req->msgid));
+		return NULL;
+	}
+
+	return req;
+}
+
+EXPORT int buxton_security_enable(struct buxton_client *client,
+		buxton_response_callback callback, void *user_data)
+{
+	struct bxt_req *req;
+
+	if (getuid() != 0) {
+		errno = EPERM;
+		return -1;
+	}
+
+	req = security_control(client, MSG_CYN_ON, callback, user_data);
+	if (!req)
+		return -1;
+
+	return 0;
+}
+
+EXPORT int buxton_security_enable_sync(struct buxton_client *client)
+{
+	int r;
+	struct bxt_req *req;
+	struct response resp;
+
+	if (getuid() != 0) {
+		errno = EPERM;
+		return -1;
+	}
+
+	req = security_control(client, MSG_CYN_ON, security_sync_cb, &resp);
+	if (!req)
+		return -1;
+
+	r = wait_msg(client, req->msgid);
+	if (r == -1)
+		return -1;
+
+	if (resp.res) {
+		errno = resp.res;
+		return -1;
+	}
+
+	return 0;
+}
+
+EXPORT int buxton_security_disable(struct buxton_client *client,
+		buxton_response_callback callback, void *user_data)
+{
+	struct bxt_req *req;
+
+	if (getuid() != 0) {
+		errno = EPERM;
+		return -1;
+	}
+
+	req = security_control(client, MSG_CYN_OFF, callback, user_data);
+	if (!req)
+		return -1;
+
+	return 0;
+}
+
+EXPORT int buxton_security_disable_sync(struct buxton_client *client)
+{
+	int r;
+	struct bxt_req *req;
+	struct response resp;
+
+	if (getuid() != 0) {
+		errno = EPERM;
+		return -1;
+	}
+
+	req = security_control(client, MSG_CYN_OFF, security_sync_cb, &resp);
+	if (!req)
+		return -1;
+
+	r = wait_msg(client, req->msgid);
+	if (r == -1)
+		return -1;
+
+	if (resp.res) {
+		errno = resp.res;
+		return -1;
+	}
 
 	return 0;
 }

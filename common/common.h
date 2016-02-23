@@ -88,6 +88,9 @@ enum message_type {
 	MSG_SET_RP,
 	MSG_GET_WP,
 	MSG_GET_RP,
+	/* Security request */
+	MSG_CYN_ON,
+	MSG_CYN_OFF,
 	MSG_MAX, /* sentinel value */
 };
 
