@@ -3,7 +3,6 @@ Description=Buxton2 Configuration Service
 After=systemd-tmpfiles-setup.service
 
 [Service]
-Environment=BUXTON_CYNARA_PERMISSIVE_MODE=1
 ExecStart=/usr/sbin/buxton2d -f
 User=buxton
 
