@@ -503,6 +503,30 @@ static void proc_get_priv(struct bxt_client *cli,
 	resp->val = val;
 }
 
+static void proc_control(struct bxt_client *cli,
+		struct request *rqst, struct response *resp)
+{
+	assert(cli);
+	assert(rqst);
+	assert(resp);
+
+	if (cli->cred.uid != 0) {
+		resp->res = EPERM;
+		return;
+	}
+
+	if (!strcmp(rqst->key, "set_security_mode")) {
+		if (rqst->val->value.b == TRUE)
+			buxton_cynara_enable();
+		else
+			buxton_cynara_disable();
+		resp->res = 0;
+	} else {
+		resp->res = ENOTSUP;
+	}
+
+}
+
 typedef void (*proc_func)(struct bxt_client *cli,
 		struct request *, struct response *);
 
@@ -518,6 +542,7 @@ static proc_func proc_funcs[MSG_MAX] = {
 	[MSG_SET_RP] = proc_set_priv,
 	[MSG_GET_WP] = proc_get_priv,
 	[MSG_GET_RP] = proc_get_priv,
+	[MSG_CTRL] = proc_control,
 };
 
 static void proc_msg(struct bxt_client *cli,
@@ -680,6 +705,7 @@ static int proc_client_msg(struct bxt_client *cli)
 	case MSG_SET_RP:
 	case MSG_GET_WP:
 	case MSG_GET_RP:
+	case MSG_CTRL:
 		r = proc_serialized_msg(cli, data, len);
 		break;
 	case MSG_NOTI:

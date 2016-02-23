@@ -457,3 +457,42 @@ int c_list(const struct buxton_layer *layer,
 	return 0;
 }
 
+int c_enable_security(UNUSED const struct buxton_layer *layer,
+		UNUSED const char *key, UNUSED const char *value,
+		UNUSED const char *rpriv, UNUSED const char *wpriv)
+{
+	int r;
+
+	r = _open();
+	if (r == -1)
+		return -1;
+
+	r = buxton_security_enable_sync(client);
+
+	_close();
+
+	if (r == -1)
+		return -1;
+
+	return 0;
+}
+
+int c_disable_security(UNUSED const struct buxton_layer *layer,
+		UNUSED const char *key, UNUSED const char *value,
+		UNUSED const char *rpriv, UNUSED const char *wpriv)
+{
+	int r;
+
+	r = _open();
+	if (r == -1)
+		return -1;
+
+	r = buxton_security_disable_sync(client);
+
+	_close();
+
+	if (r == -1)
+		return -1;
+
+	return 0;
+}

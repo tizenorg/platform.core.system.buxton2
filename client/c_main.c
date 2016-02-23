@@ -230,6 +230,22 @@ static const struct command const commands[] = {
 		.func    = c_list,
 		.dfunc   = c_direct_list,
 	},
+	{
+		.name    = "security-enable",
+		.summary = "Enable security check",
+		.nargs   = 0,
+		.usage   = "",
+		.func    = c_enable_security,
+		.dfunc   = NULL,
+	},
+	{
+		.name    = "security-disable",
+		.summary = "Disable security check",
+		.nargs   = 0,
+		.usage   = "",
+		.func    = c_disable_security,
+		.dfunc   = NULL,
+	},
 };
 
 static const struct command *find_comm(const char *name)

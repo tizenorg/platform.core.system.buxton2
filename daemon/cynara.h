@@ -45,3 +45,6 @@ enum buxton_cynara_res buxton_cynara_check(struct bxt_client *client,
 
 void buxton_cynara_cancel(struct bxt_client *client);
 
+void buxton_cynara_enable(void);
+void buxton_cynara_disable(void);
+
