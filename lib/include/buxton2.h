@@ -723,6 +723,44 @@ int buxton_get_privilege_sync(struct buxton_client *client,
 		enum buxton_priv_type type,
 		char **privilege);
 
+/**
+ * Enable buxton cynara check
+ *
+ * @param[in] client #buxton_client struct
+ * @param[in] callback response callback function
+ * @param[in] user_data User data to be used with callback function
+ * @return 0 on success, -1 on error(when an error occurred, errno is set)
+ */
+int buxton_enable_security(struct buxton_client *client,
+		buxton_response_callback callback, void *user_data);
+
+/**
+ * Enable buxton cynara check synchronously
+ *
+ * @param[in] client #buxton_client struct
+ * @return 0 on success, -1 on error(when an error occurred, errno is set)
+ */
+int buxton_enable_security_sync(struct buxton_client *client);
+
+/**
+ * Disable buxton cynara check
+ *
+ * @param[in] client #buxton_client struct
+ * @param[in] callback response callback function
+ * @param[in] user_data User data to be used with callback function
+ * @return 0 on success, -1 on error(when an error occurred, errno is set)
+ */
+int buxton_disable_security(struct buxton_client *client,
+		buxton_response_callback callback, void *user_data);
+
+/**
+ * Disable buxton cynara check synchronously
+ *
+ * @param[in] client #buxton_client struct
+ * @return 0 on success, -1 on error(when an error occurred, errno is set)
+ */
+int buxton_disable_security_sync(struct buxton_client *client);
+
 #ifdef __cplusplus
 }
 #endif

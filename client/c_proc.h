@@ -87,3 +87,9 @@ int c_create_double(const struct buxton_layer *layer, const char *key,
 int c_create_bool(const struct buxton_layer *layer, const char *key,
 		const char *value, const char *rpriv, const char *wpriv);
 
+int c_enable_security(UNUSED const struct buxton_layer *layer,
+		UNUSED const char *key, UNUSED const char *value,
+		UNUSED const char *rpriv, UNUSED const char *wpriv);
+int c_disable_security(UNUSED const struct buxton_layer *layer,
+		UNUSED const char *key, UNUSED const char *value,
+		UNUSED const char *rpriv, UNUSED const char *wpriv);

@@ -458,6 +458,7 @@ static int check_request(enum message_type type,
 	case MSG_UNNOTIFY:
 	case MSG_GET_WP:
 	case MSG_GET_RP:
+	case MSG_CTRL:
 		if (!key || !*key) {
 			bxt_err("Serialize: key is NULL or empty string");
 			goto err;
@@ -726,6 +727,7 @@ static int check_response(enum message_type type, int32_t res,
 	case MSG_UNNOTIFY:
 	case MSG_SET_WP:
 	case MSG_SET_RP:
+	case MSG_CTRL:
 		break;
 	case MSG_NOTI:
 		errno = ENOTSUP;
