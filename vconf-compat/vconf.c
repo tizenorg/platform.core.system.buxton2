@@ -518,9 +518,10 @@ EXPORT int vconf_set_int(const char *key, int intval)
 		return -1;
 
 	r = _vconf_set(key, val);
+	if (r == 0)
+		last_result = true;
 
 	buxton_value_free(val);
-	last_result = true;
 
 	return r;
 }
@@ -541,9 +542,10 @@ EXPORT int vconf_set_bool(const char *key, int boolval)
 		return -1;
 
 	r = _vconf_set(key, val);
+	if (r == 0)
+		last_result = true;
 
 	buxton_value_free(val);
-	last_result = true;
 
 	return r;
 }
@@ -564,9 +566,10 @@ EXPORT int vconf_set_str(const char *key, const char *strval)
 		return -1;
 
 	r = _vconf_set(key, val);
+	if (r == 0)
+		last_result = true;
 
 	buxton_value_free(val);
-	last_result = true;
 
 	return r;
 }
@@ -587,9 +590,10 @@ EXPORT int vconf_set_dbl(const char *key, double dblval)
 		return -1;
 
 	r = _vconf_set(key, val);
+	if (r == 0)
+		last_result = true;
 
 	buxton_value_free(val);
-	last_result = true;
 
 	return r;
 }
@@ -710,11 +714,12 @@ EXPORT char *vconf_get_str(const char *key)
 	r = buxton_value_get_string(val, &s);
 	if (r == -1)
 		s = NULL;
+	else if (r == 0)
+		last_result = true;
 
 	str = s ? strdup(s) : NULL;
 
 	buxton_value_free(val);
-	last_result = true;
 
 	return str;
 }
