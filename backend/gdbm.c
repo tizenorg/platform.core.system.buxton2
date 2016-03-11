@@ -55,18 +55,17 @@ static GDBM_FILE open_gdbm(const char *dbpath)
 	if (db)
 		return db;
 
-	db = gdbm_open(dbpath, 0, GDBM_WRCREAT, S_IRUSR | S_IWUSR, NULL);
+	nm = strdup(dbpath);
+	if (!nm) {
+		errno = ENOMEM;
+		return NULL;
+	}
+
+	db = gdbm_open(nm, 0, GDBM_WRCREAT, S_IRUSR | S_IWUSR, NULL);
 	if (!db) {
 		bxt_err("Open '%s' failed: %s", dbpath,
 				gdbm_strerror(gdbm_errno));
 		errno = EIO;
-		return NULL;
-	}
-
-	nm = strdup(dbpath);
-	if (!nm) {
-		gdbm_close(db);
-		errno = ENOMEM;
 		return NULL;
 	}
 
