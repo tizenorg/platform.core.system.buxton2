@@ -135,7 +135,8 @@ err:
 static int load_modules(const char *moddir)
 {
 	DIR *dir;
-	struct dirent *de;
+	struct dirent de;
+	struct dirent *result;
 	char *ext;
 	struct module *mod;
 
@@ -148,15 +149,15 @@ static int load_modules(const char *moddir)
 		return -1;
 	}
 
-	while ((de = readdir(dir)) != NULL) {
-		ext = strrchr(de->d_name, '.');
+	while (readdir_r(dir, &de, &result) == 0) {
+		ext = strrchr(de.d_name, '.');
 		if (!ext)
 			continue;
 
 		if (strncmp(ext, ".so", sizeof(".so")))
 			continue;
 
-		mod = load_module(moddir, de->d_name);
+		mod = load_module(moddir, de.d_name);
 		if (mod) {
 			g_hash_table_insert(backends,
 					(gpointer)mod->backend->name, mod);

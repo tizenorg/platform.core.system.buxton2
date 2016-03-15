@@ -87,13 +87,15 @@ static void c_exit(void)
 static int c_init(void)
 {
 	int r;
+	char err_buf[128] = {0,};
 
 	/* TODO: configurable */
 	change_user("buxton");
 
 	r = direct_init(MODULE_DIR, confpath ? confpath : CONFPATH);
 	if (r == -1) {
-		bxt_err("Init: %s", strerror(errno));
+		strerror_r(errno, err_buf, sizeof(err_buf));
+		bxt_err("Init: %s", err_buf);
 		return -1;
 	}
 
@@ -106,12 +108,14 @@ int c_direct_get(const struct buxton_layer *layer,
 {
 	int r;
 	struct buxton_value val;
+	char err_buf[128] = {0,};
 
 	if (!layer || !key || !*key) {
 		errno = EINVAL;
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		bxt_err("Get: Layer '%s' Key '%s': %s",
 				layer ? buxton_layer_get_name(layer) : "",
-				key ? key : "", strerror(errno));
+				key ? key : "", err_buf);
 		return -1;
 	}
 
@@ -124,9 +128,10 @@ int c_direct_get(const struct buxton_layer *layer,
 	c_exit();
 
 	if (r == -1) {
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		bxt_err("Get: Layer '%s' Key '%s': %s",
 				buxton_layer_get_name(layer), key,
-				strerror(errno));
+				err_buf);
 		return -1;
 	}
 
@@ -142,13 +147,15 @@ static int c_direct_set(const struct buxton_layer *layer,
 {
 	int r;
 	struct buxton_value val;
+	char err_buf[128] = {0,};
 
 	if (!layer || !key || !*key || !value) {
 		errno = EINVAL;
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		bxt_err("Set: Layer '%s' Key '%s' Value '%s': %s",
 				layer ? buxton_layer_get_name(layer) : "",
 				key ? key : "", value ? value : "",
-				strerror(errno));
+				err_buf);
 		return -1;
 	}
 
@@ -165,9 +172,10 @@ static int c_direct_set(const struct buxton_layer *layer,
 	c_exit();
 
 	if (r == -1) {
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		bxt_err("Set: Layer '%s' Key '%s' Value '%s': %s",
 				buxton_layer_get_name(layer), key, value,
-				strerror(errno));
+				err_buf);
 	}
 
 	return r;
@@ -229,14 +237,16 @@ static int c_direct_create(const struct buxton_layer *layer,
 {
 	int r;
 	struct buxton_value val;
+	char err_buf[128] = {0,};
 
 	if (!layer || !key || !*key || !value || !rpriv || !wpriv) {
 		errno = EINVAL;
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		bxt_err("Create: '%s' '%s' '%s' Priv '%s' '%s': %s",
 				layer ? buxton_layer_get_name(layer) : "",
 				key ? key : "", value ? value : "",
 				rpriv ? rpriv : "", wpriv ? wpriv : "",
-				strerror(errno));
+				err_buf);
 		return -1;
 	}
 
@@ -253,9 +263,10 @@ static int c_direct_create(const struct buxton_layer *layer,
 	c_exit();
 
 	if (r == -1) {
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		bxt_err("Create: '%s' '%s' '%s' Priv '%s' '%s': %s",
 				buxton_layer_get_name(layer), key, value,
-				rpriv, wpriv, strerror(errno));
+				rpriv, wpriv, err_buf);
 	}
 
 	return r;
@@ -322,13 +333,15 @@ static int c_direct_get_priv(const struct buxton_layer *layer,
 {
 	int r;
 	char *priv;
+	char err_buf[128] = {0,};
 
 	if (!layer || !key || !*key) {
 		errno = EINVAL;
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		bxt_err("Get-priv: Layer '%s' Key '%s': %s",
 				layer ? buxton_layer_get_name(layer) : "",
 				key ? key : "",
-				strerror(errno));
+				err_buf);
 		return -1;
 	}
 
@@ -341,9 +354,10 @@ static int c_direct_get_priv(const struct buxton_layer *layer,
 	c_exit();
 
 	if (r == -1) {
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		bxt_err("Get-priv: Layer '%s' Key '%s': %s",
 				buxton_layer_get_name(layer), key,
-				strerror(errno));
+				err_buf);
 		return -1;
 	}
 
@@ -371,13 +385,15 @@ static int c_direct_set_priv(const struct buxton_layer *layer,
 		const char *key, const char *priv, enum buxton_priv_type type)
 {
 	int r;
+	char err_buf[128] = {0,};
 
 	if (!layer || !key || !*key || !priv) {
 		errno = EINVAL;
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		bxt_err("Set-priv: Layer '%s' Key '%s' Priv. '%s': %s",
 				layer ? buxton_layer_get_name(layer) : "",
 				key ? key : "", priv ? priv : "",
-				strerror(errno));
+				err_buf);
 		return -1;
 	}
 
@@ -390,9 +406,10 @@ static int c_direct_set_priv(const struct buxton_layer *layer,
 	c_exit();
 
 	if (r == -1) {
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		bxt_err("Set-priv: Layer '%s' Key '%s' Priv. '%s': %s",
 				buxton_layer_get_name(layer), key, priv,
-				strerror(errno));
+				err_buf);
 	}
 
 	return r;
@@ -417,12 +434,14 @@ int c_direct_unset(const struct buxton_layer *layer,
 		UNUSED const char *rpriv, UNUSED const char *wpriv)
 {
 	int r;
+	char err_buf[128] = {0,};
 
 	if (!layer || !key || !*key) {
 		errno = EINVAL;
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		bxt_err("Unset: Layer '%s' Key '%s': %s",
 				layer ? buxton_layer_get_name(layer) : "",
-				key ? key : "", strerror(errno));
+				key ? key : "", err_buf);
 		return -1;
 	}
 
@@ -435,9 +454,10 @@ int c_direct_unset(const struct buxton_layer *layer,
 	c_exit();
 
 	if (r == -1) {
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		bxt_err("Unset: Layer '%s' Key '%s': %s",
 				buxton_layer_get_name(layer), key,
-				strerror(errno));
+				err_buf);
 	}
 
 	return r;
@@ -450,12 +470,14 @@ int c_direct_list(const struct buxton_layer *layer,
 	int r;
 	char **keys;
 	char **k;
+	char err_buf[128] = {0,};
 
 	if (!layer) {
 		errno = EINVAL;
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		bxt_err("List: Layer '%s': %s",
 				layer ? buxton_layer_get_name(layer) : "",
-				strerror(errno));
+				err_buf);
 		return -1;
 	}
 
@@ -468,8 +490,9 @@ int c_direct_list(const struct buxton_layer *layer,
 	c_exit();
 
 	if (r == -1) {
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		bxt_err("List: Layer '%s': %s", buxton_layer_get_name(layer),
-				strerror(errno));
+				err_buf);
 		return -1;
 	}
 
