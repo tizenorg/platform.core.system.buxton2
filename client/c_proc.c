@@ -27,6 +27,8 @@
 #include "c_common.h"
 #include "c_proc.h"
 
+#define BUFFER_SIZE 1024
+
 static struct buxton_client *client;
 
 static void status_cb(enum buxton_status status, void *data)
@@ -37,13 +39,16 @@ static void status_cb(enum buxton_status status, void *data)
 static int _close(void)
 {
 	int r;
+	char err_buf[BUFFER_SIZE] = {0,};
 
 	if (!client)
 		return 0;
 
 	r = buxton_close(client);
-	if (r == -1)
-		bxt_err("close: %s", strerror(errno));
+	if (r == -1){
+		strerror_r(errno, err_buf, sizeof(err_buf));
+		bxt_err("close: %s", err_buf);
+	}
 
 	client = NULL;
 
@@ -53,13 +58,16 @@ static int _close(void)
 static int _open(void)
 {
 	int r;
+	char err_buf[BUFFER_SIZE] = {0,};
 
 	if (client)
 		return 0;
 
 	r = buxton_open(&client, status_cb, NULL);
-	if (r == -1)
-		bxt_err("open: %s", strerror(errno));
+	if (r == -1){
+		strerror_r(errno, err_buf, sizeof(err_buf));
+		bxt_err("open: %s", err_buf);
+	}
 
 	return r;
 }
@@ -95,12 +103,14 @@ int c_get(const struct buxton_layer *layer,
 {
 	int r;
 	struct buxton_value *val;
+	char err_buf[BUFFER_SIZE] = {0,};
 
 	if (!layer || !key || !*key) {
 		errno = EINVAL;
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		bxt_err("Get: Layer '%s' Key '%s': %s",
 				layer ? buxton_layer_get_name(layer) : "",
-				key ? key : "", strerror(errno));
+				key ? key : "", err_buf);
 		return -1;
 	}
 
@@ -113,9 +123,10 @@ int c_get(const struct buxton_layer *layer,
 	_close();
 
 	if (r == -1) {
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		bxt_err("Get: Layer '%s' Key '%s': %s",
 				buxton_layer_get_name(layer), key,
-				strerror(errno));
+				err_buf);
 		return -1;
 	}
 
@@ -131,13 +142,15 @@ static int c_set(const struct buxton_layer *layer,
 {
 	int r;
 	struct buxton_value val;
+	char err_buf[BUFFER_SIZE] = {0,};
 
 	if (!layer || !key || !*key || !value) {
 		errno = EINVAL;
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		bxt_err("Set: Layer '%s' Key '%s' Value '%s': %s",
 				layer ? buxton_layer_get_name(layer) : "",
 				key ? key : "", value ? value : "",
-				strerror(errno));
+				err_buf);
 		return -1;
 	}
 
@@ -154,9 +167,10 @@ static int c_set(const struct buxton_layer *layer,
 	_close();
 
 	if (r == -1) {
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		bxt_err("Set: Layer '%s' Key '%s' Value '%s': %s",
 				buxton_layer_get_name(layer), key, value,
-				strerror(errno));
+				err_buf);
 	}
 
 	return r;
@@ -217,14 +231,16 @@ static int c_create(const struct buxton_layer *layer, const char *key,
 {
 	int r;
 	struct buxton_value val;
+	char err_buf[BUFFER_SIZE] = {0,};
 
 	if (!layer || !key || !*key || !value || !rpriv || !wpriv) {
 		errno = EINVAL;
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		bxt_err("Create: '%s' '%s' '%s' Priv '%s' '%s': %s",
 				layer ? buxton_layer_get_name(layer) : "",
 				key ? key : "", value ? value : "",
 				rpriv ? rpriv : "", wpriv ? wpriv : "",
-				strerror(errno));
+				err_buf);
 		return -1;
 	}
 
@@ -241,9 +257,10 @@ static int c_create(const struct buxton_layer *layer, const char *key,
 	_close();
 
 	if (r == -1) {
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		bxt_err("Create: '%s' '%s' '%s' Priv '%s' '%s': %s",
 				buxton_layer_get_name(layer), key, value,
-				rpriv, wpriv, strerror(errno));
+				rpriv, wpriv, err_buf);
 	}
 
 	return r;
@@ -296,12 +313,14 @@ static int c_get_priv(const struct buxton_layer *layer,
 {
 	int r;
 	char *priv;
+	char err_buf[BUFFER_SIZE] = {0,};
 
 	if (!layer || !key || !*key) {
 		errno = EINVAL;
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		bxt_err("Get-priv: Layer '%s' Key '%s': %s",
 				layer ? buxton_layer_get_name(layer) : "",
-				key ? key : "", strerror(errno));
+				key ? key : "", err_buf);
 		return -1;
 	}
 
@@ -314,9 +333,10 @@ static int c_get_priv(const struct buxton_layer *layer,
 	_close();
 
 	if (r == -1) {
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		bxt_err("Get-priv: Layer '%s' Key '%s': %s",
 				buxton_layer_get_name(layer), key,
-				strerror(errno));
+				err_buf);
 		return -1;
 	}
 
@@ -344,13 +364,15 @@ int c_set_priv(const struct buxton_layer *layer,
 		const char *key, const char *priv, enum buxton_priv_type type)
 {
 	int r;
+	char err_buf[BUFFER_SIZE] = {0,};
 
 	if (!layer || !key || !*key || !priv) {
 		errno = EINVAL;
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		bxt_err("Set-priv: Layer '%s' Key '%s' Priv '%s': %s",
 				layer ? buxton_layer_get_name(layer) : "",
 				key ? key : "", priv ? priv : "",
-				strerror(errno));
+				err_buf);
 		return -1;
 	}
 
@@ -363,9 +385,10 @@ int c_set_priv(const struct buxton_layer *layer,
 	_close();
 
 	if (r == -1) {
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		bxt_err("Set-priv: Layer '%s' Key '%s' Priv '%s': %s",
 				buxton_layer_get_name(layer), key, priv,
-				strerror(errno));
+				err_buf);
 	}
 
 	return r;
@@ -390,12 +413,14 @@ int c_unset(const struct buxton_layer *layer,
 		UNUSED const char *rpriv, UNUSED const char *wpriv)
 {
 	int r;
+	char err_buf[BUFFER_SIZE] = {0,};
 
 	if (!layer || !key || !*key) {
 		errno = EINVAL;
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		bxt_err("Unset: Layer '%s' Key '%s': %s",
 				layer ? buxton_layer_get_name(layer) : "",
-				key ? key : "", strerror(errno));
+				key ? key : "", err_buf);
 		return -1;
 	}
 
@@ -408,9 +433,10 @@ int c_unset(const struct buxton_layer *layer,
 	_close();
 
 	if (r == -1) {
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		bxt_err("Unset: Layer '%s' Key '%s': %s",
 				buxton_layer_get_name(layer), key,
-				strerror(errno));
+				err_buf);
 	}
 
 	return r;
@@ -423,12 +449,14 @@ int c_list(const struct buxton_layer *layer,
 	int r;
 	char **keys;
 	char **k;
+	char err_buf[BUFFER_SIZE] = {0,};
 
 	if (!layer) {
 		errno = EINVAL;
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		bxt_err("List: Layer '%s': %s",
 				layer ? buxton_layer_get_name(layer) : "",
-				strerror(errno));
+				err_buf);
 		return -1;
 	}
 
@@ -441,8 +469,9 @@ int c_list(const struct buxton_layer *layer,
 	_close();
 
 	if (r == -1) {
+		strerror_r(errno, err_buf, sizeof(err_buf));
 		bxt_err("List: Layer '%s': %s", buxton_layer_get_name(layer),
-				strerror(errno));
+				err_buf);
 		return -1;
 	}
 
