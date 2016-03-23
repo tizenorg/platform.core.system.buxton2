@@ -402,6 +402,7 @@ EXPORT int vconf_notify_key_changed(const char *key, vconf_callback_fn cb,
 {
 	int r;
 	struct noti *noti;
+	last_result = false;
 
 	if (!key || !cb) {
 		errno = EINVAL;
@@ -419,6 +420,9 @@ EXPORT int vconf_notify_key_changed(const char *key, vconf_callback_fn cb,
 		r = add_noti(noti, cb, user_data);
 
 	_close();
+
+	if (r == 0)
+		last_result = true;
 
 	return r;
 }
