@@ -157,14 +157,13 @@ int direct_get(const struct buxton_layer *layer,
 
 	r = get_val(ly, layer->uid, BUXTON_LAYER_NORMAL, key, NULL, NULL,
 			&db_val);
-	if (r == -1 && errno != ENOENT) {
+	if (r == -1) {
+		if (errno == ENOENT) {
+			*val = base_val;
+			return 0;
+		}
 		value_free(&base_val);
 		return -1;
-	}
-
-	if (errno == ENOENT) {
-		*val = base_val;
-		return 0;
 	}
 
 	value_free(&base_val);
