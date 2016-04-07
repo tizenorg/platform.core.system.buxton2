@@ -445,6 +445,7 @@ static int proc_msg_noti(struct buxton_client *client, uint8_t *data, int len)
 		return -1;
 	}
 
+	pthread_mutex_lock(&clients_lock);
 	for (l = noti->callbacks; l; l = g_list_next(l)) {
 		struct bxt_noti_cb *noticb = l->data;
 
@@ -452,9 +453,12 @@ static int proc_msg_noti(struct buxton_client *client, uint8_t *data, int len)
 			continue;
 
 		assert(noticb->callback);
+		pthread_mutex_unlock(&clients_lock);
 		noticb->callback(rqst.layer, rqst.key, rqst.val, noticb->data);
+		pthread_mutex_lock(&clients_lock);
 	}
 
+	pthread_mutex_unlock(&clients_lock);
 	free_request(&rqst);
 
 	return 0;
@@ -505,12 +509,14 @@ static int add_noticb(struct bxt_noti *noti, buxton_notify_callback notify,
 	assert(noti);
 	assert(notify);
 
+	pthread_mutex_lock(&clients_lock);
 	for (l = noti->callbacks; l; l = g_list_next(l)) {
 		noticb = l->data;
 
 		if (noticb->callback == notify) {
 			if (noticb->deleted == FALSE) {
 				errno = EEXIST;
+				pthread_mutex_unlock(&clients_lock);
 				return -1;
 			}
 
@@ -518,13 +524,16 @@ static int add_noticb(struct bxt_noti *noti, buxton_notify_callback notify,
 			noticb->callback = notify;
 			noticb->data = notify_data;
 
+			pthread_mutex_unlock(&clients_lock);
 			return 0;
 		}
 	}
 
 	noticb = calloc(1, sizeof(*noticb));
-	if (!noticb)
+	if (!noticb) {
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
+	}
 
 	noticb->deleted = FALSE;
 	noticb->callback = notify;
@@ -532,6 +541,7 @@ static int add_noticb(struct bxt_noti *noti, buxton_notify_callback notify,
 
 	noti->callbacks = g_list_append(noti->callbacks, noticb);
 
+	pthread_mutex_unlock(&clients_lock);
 	return 0;
 }
 
@@ -1279,6 +1289,7 @@ static gboolean del_noticb_cb(gpointer data)
 
 	assert(noti);
 
+	pthread_mutex_lock(&clients_lock);
 	for (l = noti->callbacks, ll = g_list_next(l); l;
 			l = ll, ll = g_list_next(ll)) {
 		noticb = l->data;
@@ -1289,6 +1300,7 @@ static gboolean del_noticb_cb(gpointer data)
 			free(noticb);
 		}
 	}
+	pthread_mutex_unlock(&clients_lock);
 
 	noti->id = 0;
 
@@ -1307,6 +1319,8 @@ static int del_noticb(struct bxt_noti *noti, buxton_notify_callback notify,
 
 	cnt = 0;
 	f = FALSE;
+
+	pthread_mutex_lock(&clients_lock);
 	for (l = noti->callbacks; l; l = g_list_next(l)) {
 		struct bxt_noti_cb *noticb = l->data;
 
@@ -1320,6 +1334,7 @@ static int del_noticb(struct bxt_noti *noti, buxton_notify_callback notify,
 		if (noticb->deleted == FALSE)
 			cnt++;
 	}
+	pthread_mutex_unlock(&clients_lock);
 
 	if (!f) {
 		errno = ENOENT;
@@ -1977,7 +1992,9 @@ static void free_noti(struct bxt_noti *noti)
 	if (!noti)
 		return;
 
+	pthread_mutex_lock(&clients_lock);
 	g_list_free_full(noti->callbacks, (GDestroyNotify)free);
+	pthread_mutex_unlock(&clients_lock);
 
 	if (noti->id) {
 		g_source_remove(noti->id);
