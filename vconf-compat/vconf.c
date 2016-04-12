@@ -36,11 +36,12 @@
 
 #define LOGE(fmt, ...) fprintf(stderr, fmt "\n", ##__VA_ARGS__)
 
-static int _refcnt;
-static struct buxton_client *client;
-static struct buxton_layer *system_layer;
-static struct buxton_layer *memory_layer;
+static __thread int _refcnt;
+static __thread struct buxton_client *client;
+static __thread struct buxton_layer *system_layer;
+static __thread struct buxton_layer *memory_layer;
 static GHashTable *noti_tbl;
+static int tbl_refcnt;
 
 struct noti {
 	char *key;
@@ -53,7 +54,7 @@ struct noti_cb {
 	gboolean deleted;
 };
 
-static bool last_result;
+static __thread bool last_result;
 
 EXPORT char *vconf_keynode_get_name(keynode_t *keynode)
 {
@@ -194,8 +195,11 @@ static void _close(void)
 	buxton_free_layer(memory_layer);
 	memory_layer = NULL;
 
-	g_hash_table_destroy(noti_tbl);
-	noti_tbl = NULL;
+	tbl_refcnt--;
+	if (!tbl_refcnt) {
+		g_hash_table_destroy(noti_tbl);
+		noti_tbl = NULL;
+	}
 
 	buxton_close(client);
 	client = NULL;
@@ -215,8 +219,10 @@ static int _open(void)
 		return -1;
 	}
 
-	noti_tbl = g_hash_table_new_full(g_str_hash, g_str_equal,
-			NULL, (GDestroyNotify)free_noti);
+	if (!tbl_refcnt)
+		noti_tbl = g_hash_table_new_full(g_str_hash, g_str_equal,
+				NULL, (GDestroyNotify)free_noti);
+	tbl_refcnt++;
 
 	system_layer = buxton_create_layer("system");
 	memory_layer = buxton_create_layer("memory");
