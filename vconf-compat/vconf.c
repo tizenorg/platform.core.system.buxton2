@@ -36,6 +36,7 @@
 
 #define LOGE(fmt, ...) fprintf(stderr, fmt "\n", ##__VA_ARGS__)
 
+static pthread_mutex_t vconf_lock = PTHREAD_MUTEX_INITIALIZER;
 static int _refcnt;
 static struct buxton_client *client;
 static struct buxton_layer *system_layer;
@@ -184,9 +185,13 @@ static void free_noti(struct noti *noti)
 
 static void _close(void)
 {
+	pthread_mutex_lock(&vconf_lock);
+
 	_refcnt--;
-	if (_refcnt)
+	if (_refcnt) {
+		pthread_mutex_unlock(&vconf_lock);
 		return;
+	}
 
 	buxton_free_layer(system_layer);
 	system_layer = NULL;
@@ -199,19 +204,26 @@ static void _close(void)
 
 	buxton_close(client);
 	client = NULL;
+
+	pthread_mutex_unlock(&vconf_lock);
 }
 
 static int _open(void)
 {
 	int r;
 
+	pthread_mutex_lock(&vconf_lock);
+
 	_refcnt++;
-	if (_refcnt > 1)
+	if (_refcnt > 1) {
+		pthread_mutex_unlock(&vconf_lock);
 		return 0;
+	}
 
 	r = buxton_open(&client, NULL, NULL);
 	if (r == -1) {
 		LOGE("Can't connect to buxton: %d", errno);
+		pthread_mutex_unlock(&vconf_lock);
 		return -1;
 	}
 
@@ -221,6 +233,7 @@ static int _open(void)
 	system_layer = buxton_create_layer("system");
 	memory_layer = buxton_create_layer("memory");
 
+	pthread_mutex_unlock(&vconf_lock);
 	return 0;
 }
 
@@ -391,7 +404,7 @@ static int register_noti(const char *key, vconf_callback_fn cb, void *user_data)
 	}
 
 	/* increase reference count */
-	_open();
+	_refcnt++;
 	g_hash_table_insert(noti_tbl, noti->key, noti);
 
 	return 0;
@@ -413,11 +426,13 @@ EXPORT int vconf_notify_key_changed(const char *key, vconf_callback_fn cb,
 	if (r == -1)
 		return -1;
 
+	pthread_mutex_lock(&vconf_lock);
 	noti = g_hash_table_lookup(noti_tbl, key);
 	if (!noti)
 		r = register_noti(key, cb, user_data);
 	else
 		r = add_noti(noti, cb, user_data);
+	pthread_mutex_unlock(&vconf_lock);
 
 	_close();
 
@@ -453,37 +468,45 @@ static int unregister_noti(struct noti *noti)
 
 	g_hash_table_remove(noti_tbl, noti->key);
 
-	/* decrease reference count */
-	_close();
-
 	return r;
 }
 
 EXPORT int vconf_ignore_key_changed(const char *key, vconf_callback_fn cb)
 {
+	int r;
 	struct noti *noti;
 	struct noti_cb *noticb;
 
+	pthread_mutex_lock(&vconf_lock);
 	if (!key || !cb) {
+		pthread_mutex_unlock(&vconf_lock);
 		errno = EINVAL;
 		return -1;
 	}
 
 	noti = g_hash_table_lookup(noti_tbl, key);
 	if (!noti) {
+		pthread_mutex_unlock(&vconf_lock);
 		errno = ENOENT;
 		return -1;
 	}
 
 	noticb = find_noti_cb(noti, cb);
 	if (!noticb) {
+		pthread_mutex_unlock(&vconf_lock);
 		errno = ENOENT;
 		return -1;
 	}
 
 	noticb->deleted = TRUE;
 
-	return unregister_noti(noti);
+	r = unregister_noti(noti);
+	pthread_mutex_unlock(&vconf_lock);
+
+	/* decrease reference count */
+	_close();
+
+	return r;
 }
 
 static int _vconf_set(const char *key, const struct buxton_value *val)
