@@ -36,8 +36,9 @@
 
 #define LOGE(fmt, ...) fprintf(stderr, fmt "\n", ##__VA_ARGS__)
 
+static pthread_mutex_t vconf_lock = PTHREAD_MUTEX_INITIALIZER;
 static int _refcnt;
-static struct buxton_client *client;
+static struct buxton_client *noti_client;
 static struct buxton_layer *system_layer;
 static struct buxton_layer *memory_layer;
 static GHashTable *noti_tbl;
@@ -182,11 +183,15 @@ static void free_noti(struct noti *noti)
 	free(noti);
 }
 
-static void _close(void)
+static void _close_for_noti(void)
 {
+	pthread_mutex_lock(&vconf_lock);
+
 	_refcnt--;
-	if (_refcnt)
+	if (_refcnt) {
+		pthread_mutex_unlock(&vconf_lock);
 		return;
+	}
 
 	buxton_free_layer(system_layer);
 	system_layer = NULL;
@@ -197,21 +202,28 @@ static void _close(void)
 	g_hash_table_destroy(noti_tbl);
 	noti_tbl = NULL;
 
-	buxton_close(client);
-	client = NULL;
+	buxton_close(noti_client);
+	noti_client = NULL;
+
+	pthread_mutex_unlock(&vconf_lock);
 }
 
-static int _open(void)
+static int _open_for_noti(void)
 {
 	int r;
 
-	_refcnt++;
-	if (_refcnt > 1)
-		return 0;
+	pthread_mutex_lock(&vconf_lock);
 
-	r = buxton_open(&client, NULL, NULL);
+	_refcnt++;
+	if (_refcnt > 1) {
+		pthread_mutex_unlock(&vconf_lock);
+		return 0;
+	}
+
+	r = buxton_open(&noti_client, NULL, NULL);
 	if (r == -1) {
 		LOGE("Can't connect to buxton: %d", errno);
+		pthread_mutex_unlock(&vconf_lock);
 		return -1;
 	}
 
@@ -220,6 +232,32 @@ static int _open(void)
 
 	system_layer = buxton_create_layer("system");
 	memory_layer = buxton_create_layer("memory");
+
+	pthread_mutex_unlock(&vconf_lock);
+	return 0;
+}
+
+static void _close(struct buxton_client *client, struct buxton_layer *layer)
+{
+	buxton_free_layer(layer);
+	buxton_close(client);
+}
+
+static int _open(const char *key, struct buxton_client **client,
+		struct buxton_layer **layer)
+{
+	int r;
+
+	r = buxton_open(client, NULL, NULL);
+	if (r == -1) {
+		LOGE("Can't connect to buxton: %d", errno);
+		return -1;
+	}
+
+	if (key && !strncmp(key, "memory/", strlen("memory/")))
+		*layer = buxton_create_layer("memory");
+	else
+		*layer = buxton_create_layer("system");
 
 	return 0;
 }
@@ -356,7 +394,8 @@ static int add_noti(struct noti *noti, vconf_callback_fn cb, void *user_data)
 	return 0;
 }
 
-static int register_noti(const char *key, vconf_callback_fn cb, void *user_data)
+static struct noti *create_noti(const char *key, vconf_callback_fn cb,
+		void *user_data)
 {
 	int r;
 	struct noti *noti;
@@ -366,35 +405,24 @@ static int register_noti(const char *key, vconf_callback_fn cb, void *user_data)
 
 	noti = calloc(1, sizeof(*noti));
 	if (!noti)
-		return -1;
+		return NULL;
 
 	noti->key = strdup(key);
 	if (!noti->key) {
 		free(noti);
-		return -1;
+		return NULL;
 	}
 
 	r = add_noti(noti, cb, user_data);
 	if (r == -1) {
 		free(noti->key);
 		free(noti);
-		return -1;
+		return NULL;
 	}
 
-	r = buxton_register_notification_sync(client, get_layer(key), key,
-			notify_cb, noti);
-	if (r == -1) {
-		LOGE("vconf_notify_key_changed: key '%s' add notify error %d",
-				key, errno);
-		free_noti(noti);
-		return -1;
-	}
-
-	/* increase reference count */
-	_open();
 	g_hash_table_insert(noti_tbl, noti->key, noti);
 
-	return 0;
+	return noti;
 }
 
 EXPORT int vconf_notify_key_changed(const char *key, vconf_callback_fn cb,
@@ -409,17 +437,37 @@ EXPORT int vconf_notify_key_changed(const char *key, vconf_callback_fn cb,
 		return -1;
 	}
 
-	r = _open();
+	r = _open_for_noti();
 	if (r == -1)
 		return -1;
 
+	pthread_mutex_lock(&vconf_lock);
 	noti = g_hash_table_lookup(noti_tbl, key);
-	if (!noti)
-		r = register_noti(key, cb, user_data);
-	else
+	if (!noti) {
+		noti = create_noti(key, cb, user_data);
+		pthread_mutex_unlock(&vconf_lock);
+		if (!noti) {
+			_close_for_noti();
+			return -1;
+		}
+		r = buxton_register_notification_sync(noti_client, get_layer(key), key,
+				notify_cb, noti);
+		if (r == -1) {
+			LOGE("vconf_notify_key_changed: key '%s' add notify error %d",
+					key, errno);
+			pthread_mutex_lock(&vconf_lock);
+			g_hash_table_remove(noti_tbl, noti->key);
+			pthread_mutex_unlock(&vconf_lock);
+		}
+		/* increase reference count */
+		if (r == 0)
+			_open_for_noti();
+	} else {
 		r = add_noti(noti, cb, user_data);
+		pthread_mutex_unlock(&vconf_lock);
+	}
 
-	_close();
+	_close_for_noti();
 
 	if (r == 0)
 		last_result = true;
@@ -429,7 +477,6 @@ EXPORT int vconf_notify_key_changed(const char *key, vconf_callback_fn cb,
 
 static int unregister_noti(struct noti *noti)
 {
-	int r;
 	int cnt;
 	GList *l;
 
@@ -444,23 +491,17 @@ static int unregister_noti(struct noti *noti)
 	}
 
 	if (cnt > 0)
-		return 0;
-
-	r = buxton_unregister_notification_sync(client, get_layer(noti->key),
-			noti->key, notify_cb);
-	if (r == -1)
-		LOGE("unregister error '%s' %d", noti->key, errno);
+		return cnt;
 
 	g_hash_table_remove(noti_tbl, noti->key);
 
-	/* decrease reference count */
-	_close();
-
-	return r;
+	return 0;
 }
 
 EXPORT int vconf_ignore_key_changed(const char *key, vconf_callback_fn cb)
 {
+	int r;
+	int cnt;
 	struct noti *noti;
 	struct noti_cb *noticb;
 
@@ -469,39 +510,58 @@ EXPORT int vconf_ignore_key_changed(const char *key, vconf_callback_fn cb)
 		return -1;
 	}
 
+	pthread_mutex_lock(&vconf_lock);
 	noti = g_hash_table_lookup(noti_tbl, key);
 	if (!noti) {
+		pthread_mutex_unlock(&vconf_lock);
 		errno = ENOENT;
 		return -1;
 	}
 
 	noticb = find_noti_cb(noti, cb);
 	if (!noticb) {
+		pthread_mutex_unlock(&vconf_lock);
 		errno = ENOENT;
 		return -1;
 	}
 
 	noticb->deleted = TRUE;
 
-	return unregister_noti(noti);
+	cnt = unregister_noti(noti);
+	pthread_mutex_unlock(&vconf_lock);
+
+	if (cnt > 0)
+		return 0;
+
+	r = buxton_unregister_notification_sync(noti_client, get_layer(key),
+			key, notify_cb);
+	if (r == -1)
+		LOGE("unregister error '%s' %d", noti->key, errno);
+
+	/* decrease reference count */
+	_close_for_noti();
+
+	return 0;
 }
 
 static int _vconf_set(const char *key, const struct buxton_value *val)
 {
 	int r;
+	struct buxton_client *client;
+	struct buxton_layer *layer;
 
 	assert(key);
 	assert(val);
 
-	r = _open();
+	r = _open(key, &client, &layer);
 	if (r == -1)
 		return -1;
 
-	r = buxton_set_value_sync(client, get_layer(key), key, val);
+	r = buxton_set_value_sync(client, layer, key, val);
 	if (r == -1)
 		LOGE("set value: key '%s' errno %d", key, errno);
 
-	_close();
+	_close(client, layer);
 
 	return r;
 }
@@ -606,16 +666,18 @@ static int _vconf_get(const char *key, enum buxton_key_type type,
 		struct buxton_value **val)
 {
 	int r;
+	struct buxton_client *client;
+	struct buxton_layer *layer;
 	struct buxton_value *v;
 
 	assert(key);
 	assert(val);
 
-	r = _open();
+	r = _open(key, &client, &layer);
 	if (r == -1)
 		return -1;
 
-	r = buxton_get_value_sync(client, get_layer(key), key, &v);
+	r = buxton_get_value_sync(client, layer, key, &v);
 	if (r == -1) {
 		LOGE("get value: key '%s' errno %d", key, errno);
 	} else {
@@ -634,7 +696,7 @@ static int _vconf_get(const char *key, enum buxton_key_type type,
 		}
 	}
 
-	_close();
+	_close(client, layer);
 
 	return r;
 }
@@ -1096,7 +1158,8 @@ static int set_keynode_value(struct buxton_value *v, struct _keynode_t *keynode)
 	return r;
 }
 
-static struct _keynode_t *alloc_keynode(struct buxton_layer *layer,
+static struct _keynode_t *alloc_keynode(struct buxton_client *client,
+		struct buxton_layer *layer,
 		const char *keyname)
 {
 	int r;
@@ -1146,6 +1209,7 @@ EXPORT int vconf_get(keylist_t *keylist,
 	unsigned int len;
 	int i;
 	int dirlen;
+	struct buxton_client *client;
 	struct buxton_layer *layer;
 
 	if (!keylist || !in_parentDIR) {
@@ -1159,16 +1223,14 @@ EXPORT int vconf_get(keylist_t *keylist,
 		return -1;
 	}
 
-	r = _open();
+	r = _open(in_parentDIR, &client, &layer);
 	if (r == -1)
 		return -1;
-
-	layer = get_layer(in_parentDIR);
 
 	r = buxton_list_keys_sync(client, layer, &names, &len);
 	if (r == -1) {
 		LOGE("get key list: errno %d", errno);
-		_close();
+		_close(client, layer);
 		return -1;
 	}
 
@@ -1181,31 +1243,26 @@ EXPORT int vconf_get(keylist_t *keylist,
 		if (strncmp(in_parentDIR, names[i], dirlen))
 			continue;
 
-		keynode = alloc_keynode(layer, names[i]);
+		keynode = alloc_keynode(client, layer, names[i]);
 		if (keynode)
 			keylist->list = g_list_append(keylist->list, keynode);
 	}
 
 	buxton_free_keys(names);
 
-	_close();
+	_close(client, layer);
 
 	return 0;
 }
 
 EXPORT int vconf_set(keylist_t *keylist)
 {
-	int r;
 	GList *l;
 
 	if (!keylist) {
 		errno = EINVAL;
 		return -1;
 	}
-
-	r = _open();
-	if (r == -1)
-		return -1;
 
 	for (l = keylist->list; l; l = g_list_next(l)) {
 		struct _keynode_t *keynode = l->data;
@@ -1233,14 +1290,15 @@ EXPORT int vconf_set(keylist_t *keylist)
 			LOGE("set key '%s' errno %d", keynode->keyname, errno);
 	}
 
-	_close();
-
 	return 0;
 }
 
 EXPORT int vconf_unset(const char *in_key)
 {
 	int r;
+	struct buxton_client *client;
+	struct buxton_layer *layer;
+
 	if (getuid() != 0)
 		return VCONF_ERROR_NOT_SUPPORTED;
 
@@ -1249,15 +1307,15 @@ EXPORT int vconf_unset(const char *in_key)
 		return -1;
 	}
 
-	r = _open();
+	r = _open(in_key, &client, &layer);
 	if (r == -1)
 		return -1;
 
-	r = buxton_unset_value_sync(client, get_layer(in_key), in_key);
+	r = buxton_unset_value_sync(client, layer, in_key);
 	if (r == -1)
 		LOGE("unset value: key '%s' errno %d", in_key, errno);
 
-	_close();
+	_close(client, layer);
 
 	return r;
 }
@@ -1269,6 +1327,7 @@ EXPORT int vconf_unset_recursive(const char *in_dir)
 	int dirlen;
 	char **names;
 	unsigned int len;
+	struct buxton_client *client;
 	struct buxton_layer *layer;
 
 	if (getuid() != 0)
@@ -1285,16 +1344,14 @@ EXPORT int vconf_unset_recursive(const char *in_dir)
 		return -1;
 	}
 
-	r = _open();
+	r = _open(in_dir, &client, &layer);
 	if (r == -1)
 		return -1;
-
-	layer = get_layer(in_dir);
 
 	r = buxton_list_keys_sync(client, layer, &names, &len);
 	if (r == -1) {
 		LOGE("get key list: errno %d", errno);
-		_close();
+		_close(client, layer);
 		return -1;
 	}
 
@@ -1305,13 +1362,13 @@ EXPORT int vconf_unset_recursive(const char *in_dir)
 		r = vconf_unset(names[i]);
 		if (r == -1) {
 			buxton_free_keys(names);
-			_close();
+			_close(client, layer);
 			return -1;
 		}
 	}
 
 	buxton_free_keys(names);
-	_close();
+	_close(client, layer);
 
 	return 0;
 }
@@ -1319,22 +1376,24 @@ EXPORT int vconf_unset_recursive(const char *in_dir)
 EXPORT int vconf_sync_key(const char *in_key)
 {
 	int r;
+	struct buxton_client *client;
+	struct buxton_layer *layer;
 	struct buxton_value *v;
 
 	assert(in_key);
 
-	r = _open();
+	r = _open(in_key, &client, &layer);
 	if (r == -1)
 		return -1;
 
-	r = buxton_get_value_sync(client, get_layer(in_key), in_key, &v);
+	r = buxton_get_value_sync(client, layer, in_key, &v);
 	if (r == -1) {
 		LOGE("get value: key '%s'", in_key);
 	} else {
 		r = 0;
 	}
 
-	_close();
+	_close(client, layer);
 
 	return r;
 }
