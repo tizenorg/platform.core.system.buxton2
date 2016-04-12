@@ -36,10 +36,10 @@
 
 #define LOGE(fmt, ...) fprintf(stderr, fmt "\n", ##__VA_ARGS__)
 
-static int _refcnt;
-static struct buxton_client *client;
-static struct buxton_layer *system_layer;
-static struct buxton_layer *memory_layer;
+static __thread int _refcnt;
+static __thread struct buxton_client *client;
+static __thread struct buxton_layer *system_layer;
+static __thread struct buxton_layer *memory_layer;
 static GHashTable *noti_tbl;
 
 struct noti {
@@ -53,7 +53,7 @@ struct noti_cb {
 	gboolean deleted;
 };
 
-static bool last_result;
+static __thread bool last_result;
 
 EXPORT char *vconf_keynode_get_name(keynode_t *keynode)
 {
