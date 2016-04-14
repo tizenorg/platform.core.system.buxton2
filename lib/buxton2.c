@@ -723,7 +723,7 @@ static int wait_msg(struct buxton_client *client, guint32 msgid)
 	ms = TS_SUB(&to, &t);
 
 	while (ms > 0) {
-		r = poll(fds, 1, ms > 100 ? 100 : ms);
+		r = poll(fds, 1, ms > 10 ? 10 : ms);
 
 		switch (r) {
 		case -1:
