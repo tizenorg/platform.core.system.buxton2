@@ -61,7 +61,7 @@ static GDBM_FILE open_gdbm(const char *dbpath)
 		return NULL;
 	}
 
-	db = gdbm_open(nm, 0, GDBM_WRCREAT, S_IRUSR | S_IWUSR, NULL);
+	db = gdbm_open(nm, 0, GDBM_WRCREAT | GDBM_SYNC, S_IRUSR | S_IWUSR, NULL);
 	if (!db) {
 		bxt_err("Open '%s' failed: %s", dbpath,
 				gdbm_strerror(gdbm_errno));
