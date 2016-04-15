@@ -157,6 +157,8 @@ static int set_value(const char *dbpath, const char *key, const void *data,
 		return -1;
 	}
 
+	gdbm_sync(db);
+
 	bxt_dbg("Set '%s' Key '%s'", dbpath, key);
 
 	return 0;
@@ -229,6 +231,8 @@ static int unset_value(const char *dbpath, const char *key)
 
 		return -1;
 	}
+
+	gdbm_sync(db);
 
 	bxt_dbg("Unset '%s' Key '%s'", dbpath, key);
 
