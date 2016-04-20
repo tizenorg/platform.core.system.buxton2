@@ -1993,9 +1993,9 @@ static void free_noti(struct bxt_noti *noti)
 	if (!noti)
 		return;
 
-	pthread_mutex_lock(&clients_lock);
+	pthread_mutex_lock(&noti_cbs_lock);
 	g_list_free_full(noti->callbacks, (GDestroyNotify)free);
-	pthread_mutex_unlock(&clients_lock);
+	pthread_mutex_unlock(&noti_cbs_lock);
 
 	if (noti->id) {
 		g_source_remove(noti->id);
