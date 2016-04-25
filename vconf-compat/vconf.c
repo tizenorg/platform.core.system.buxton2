@@ -456,7 +456,7 @@ EXPORT int vconf_notify_key_changed(const char *key, vconf_callback_fn cb,
 			LOGE("vconf_notify_key_changed: key '%s' add notify error %d",
 					key, errno);
 			pthread_mutex_lock(&vconf_lock);
-			g_hash_table_remove(noti_tbl, noti->key);
+			g_hash_table_remove(noti_tbl, key);
 			pthread_mutex_unlock(&vconf_lock);
 		}
 		/* increase reference count */
