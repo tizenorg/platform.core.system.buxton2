@@ -248,7 +248,7 @@ static int _open(const char *key, struct buxton_client **client,
 {
 	int r;
 
-	r = buxton_open(client, NULL, NULL);
+	r = buxton_open_full(client, false, NULL, NULL);
 	if (r == -1) {
 		LOGE("Can't connect to buxton: %d", errno);
 		return -1;
