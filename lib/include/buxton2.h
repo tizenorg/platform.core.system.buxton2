@@ -29,6 +29,7 @@ extern "C" {
 
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <sys/types.h>
 
 /**
@@ -60,6 +61,22 @@ enum buxton_status {
  */
 typedef void (*buxton_status_callback)(enum buxton_status status,
 		void *user_data);
+
+/**
+ * Open a connection to the Buxton daemon like buxton_open with attach_fd flag
+ *
+ * @param[out] client A pointer #buxton_client is allocated to
+ *                    (this value should be released by #buxton_close)
+ * @param[in] callback status callback function. If this is NULL, no callback
+ *                     function is invoked
+ * @param[in] user_data User data to be used with status callback function
+ * @param[in] attach_fd The flag whether attach fd in main loop or not
+ * @return 0 on success, -1 on error(when an error occurred, errno is set)
+ *
+ * @see buxton_close
+ */
+int buxton_open_full(struct buxton_client **client, bool attach_fd,
+		buxton_status_callback callback, void *user_data);
 
 /**
  * Open a connection to the Buxton daemon

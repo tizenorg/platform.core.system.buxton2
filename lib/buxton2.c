@@ -2152,7 +2152,7 @@ EXPORT int buxton_close(struct buxton_client *client)
 	return 0;
 }
 
-EXPORT int buxton_open(struct buxton_client **client,
+EXPORT int buxton_open_full(struct buxton_client **client, bool attach_fd,
 		buxton_status_callback callback, void *user_data)
 {
 	struct buxton_client *cli;
@@ -2192,9 +2192,12 @@ EXPORT int buxton_open(struct buxton_client **client,
 		return -1;
 	}
 
-	cli->fd_id = g_unix_fd_add(cli->fd,
-			G_IO_IN | G_IO_ERR | G_IO_HUP | G_IO_NVAL,
-			recv_cb, cli);
+	if (attach_fd)
+		cli->fd_id = g_unix_fd_add(cli->fd,
+				G_IO_IN | G_IO_ERR | G_IO_HUP | G_IO_NVAL,
+				recv_cb, cli);
+	else
+		cli->fd_id = 0;
 
 	pthread_mutex_lock(&clients_lock);
 	clients = g_list_append(clients, cli);
@@ -2205,6 +2208,12 @@ EXPORT int buxton_open(struct buxton_client **client,
 		callback(BUXTON_STATUS_CONNECTED, user_data);
 
 	return 0;
+}
+
+EXPORT int buxton_open(struct buxton_client **client,
+		buxton_status_callback callback, void *user_data)
+{
+	return buxton_open_full(client, callback, user_data, true);
 }
 
 __attribute__((destructor))
