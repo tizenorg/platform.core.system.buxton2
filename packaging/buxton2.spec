@@ -153,7 +153,7 @@ chsmack -a System "${dbdir}"
 %manifest %{name}.manifest
 %license LICENSE.Apache-2.0
 %config(noreplace) %{_sysconfdir}/%{name}.conf
-%{_bindir}/buxton2ctl
+%attr(0750,root,root) %{_bindir}/buxton2ctl
 %{_sbindir}/buxton2d
 %{_libdir}/%{name}/*.so
 %{_libdir}/libbuxton2.so.*
@@ -171,7 +171,7 @@ chsmack -a System "${dbdir}"
 
 %files -n vconf-compat
 %manifest %{name}.manifest
-%{_bindir}/vconftool
+%attr(0750,root,root) %{_bindir}/vconftool
 %{_libdir}/libvconf.so.*
 
 %files -n vconf-compat-devel
