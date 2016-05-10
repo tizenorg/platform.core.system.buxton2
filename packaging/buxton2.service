@@ -5,6 +5,7 @@ After=systemd-tmpfiles-setup.service
 [Service]
 ExecStart=/usr/sbin/buxton2d -f
 User=buxton
+LimitNOFILE=16384
 
 [Install]
 WantedBy=multi-user.target
