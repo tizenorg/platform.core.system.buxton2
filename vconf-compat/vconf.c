@@ -52,6 +52,7 @@ struct noti_cb {
 	vconf_callback_fn cb;
 	void *user_data;
 	gboolean deleted;
+	int refcnt;
 };
 
 static bool last_result;
@@ -159,6 +160,9 @@ static gboolean free_noti_cb(gpointer data)
 		if (!noticb->deleted)
 			continue;
 
+		if (noticb->refcnt > 0)
+			continue;
+
 		list = g_list_delete_link(list, l);
 		free(noticb);
 	}
@@ -176,6 +180,7 @@ static void free_noti(struct noti *noti)
 		struct noti_cb *noticb = l->data;
 
 		noticb->deleted = TRUE;
+		noticb->refcnt--;
 	}
 	g_idle_add(free_noti_cb, noti->noti_list);
 
@@ -338,7 +343,9 @@ static void notify_cb(const struct buxton_layer *layer, const char *key,
 			continue;
 
 		assert(noticb->cb);
+		noticb->refcnt++;
 		noticb->cb(node, noticb->user_data);
+		noticb->refcnt--;
 	}
 
 	free(node);
@@ -374,6 +381,7 @@ static int add_noti(struct noti *noti, vconf_callback_fn cb, void *user_data)
 		if (noticb->deleted) { /* reuse */
 			noticb->user_data = user_data;
 			noticb->deleted = FALSE;
+			noticb->refcnt = 1;
 			return 0;
 		}
 
@@ -388,6 +396,7 @@ static int add_noti(struct noti *noti, vconf_callback_fn cb, void *user_data)
 	noticb->cb = cb;
 	noticb->user_data = user_data;
 	noticb->deleted = FALSE;
+	noticb->refcnt = 1;
 
 	noti->noti_list = g_list_append(noti->noti_list, noticb);
 
