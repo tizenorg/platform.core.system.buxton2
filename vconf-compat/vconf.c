@@ -51,7 +51,7 @@ struct noti {
 struct noti_cb {
 	vconf_callback_fn cb;
 	void *user_data;
-	gboolean deleted;
+	int refcnt;
 };
 
 static bool last_result;
@@ -144,40 +144,32 @@ static struct buxton_layer *get_layer(const char *key)
 	return system_layer;
 }
 
-static gboolean free_noti_cb(gpointer data)
+static void ref_noticb(struct noti_cb *noticb)
 {
-	GList *list = data;
-	GList *l;
-	GList *n;
+	noticb->refcnt++;
+}
 
-	if (!list)
-		return G_SOURCE_REMOVE;
-
-	for (l = list, n = g_list_next(l); l; l = n, n = g_list_next(n)) {
-		struct noti_cb *noticb = l->data;
-
-		if (!noticb->deleted)
-			continue;
-
-		list = g_list_delete_link(list, l);
+static void unref_noticb(struct noti_cb *noticb)
+{
+	noticb->refcnt--;
+	if (noticb->refcnt == 0)
 		free(noticb);
-	}
-
-	return G_SOURCE_REMOVE;
 }
 
 static void free_noti(struct noti *noti)
 {
 	GList *l;
+	GList *n;
 
 	assert(noti);
 
-	for (l = noti->noti_list; l; l = g_list_next(l)) {
+	for (l = noti->noti_list, n = g_list_next(l); l;
+			l = n, n = g_list_next(n)) {
 		struct noti_cb *noticb = l->data;
 
-		noticb->deleted = TRUE;
+		noti->noti_list = g_list_delete_link(noti->noti_list, l);
+		unref_noticb(noticb);
 	}
-	g_idle_add(free_noti_cb, noti->noti_list);
 
 	free(noti->key);
 	free(noti);
@@ -334,11 +326,10 @@ static void notify_cb(const struct buxton_layer *layer, const char *key,
 	for (l = noti->noti_list; l; l = g_list_next(l)) {
 		struct noti_cb *noticb = l->data;
 
-		if (noticb->deleted)
-			continue;
-
 		assert(noticb->cb);
+		ref_noticb(noticb);
 		noticb->cb(node, noticb->user_data);
+		unref_noticb(noticb);
 	}
 
 	free(node);
@@ -371,12 +362,6 @@ static int add_noti(struct noti *noti, vconf_callback_fn cb, void *user_data)
 
 	noticb = find_noti_cb(noti, cb);
 	if (noticb) {
-		if (noticb->deleted) { /* reuse */
-			noticb->user_data = user_data;
-			noticb->deleted = FALSE;
-			return 0;
-		}
-
 		errno = EEXIST;
 		return -1;
 	}
@@ -387,7 +372,7 @@ static int add_noti(struct noti *noti, vconf_callback_fn cb, void *user_data)
 
 	noticb->cb = cb;
 	noticb->user_data = user_data;
-	noticb->deleted = FALSE;
+	noticb->refcnt = 1;
 
 	noti->noti_list = g_list_append(noti->noti_list, noticb);
 
@@ -484,10 +469,7 @@ static int unregister_noti(struct noti *noti)
 
 	cnt = 0;
 	for (l = noti->noti_list; l; l = g_list_next(l)) {
-		struct noti_cb *noticb = l->data;
-
-		if (!noticb->deleted)
-			cnt++;
+		cnt++;
 	}
 
 	if (cnt > 0)
@@ -524,8 +506,6 @@ EXPORT int vconf_ignore_key_changed(const char *key, vconf_callback_fn cb)
 		errno = ENOENT;
 		return -1;
 	}
-
-	noticb->deleted = TRUE;
 
 	cnt = unregister_noti(noti);
 	pthread_mutex_unlock(&vconf_lock);
