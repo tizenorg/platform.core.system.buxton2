@@ -691,16 +691,13 @@ static int proc_msg(struct buxton_client *client)
 
 	assert(client);
 
-	pthread_mutex_lock(&clients_lock);
 	f = g_list_find(clients, client);
 	if (!f) {
 		bxt_dbg("recv msg: cli %p removed\n", client);
-		pthread_mutex_unlock(&clients_lock);
 		return 0;
 	}
 
 	r = proto_recv_async(client->fd, proc_msg_cb, client);
-	pthread_mutex_unlock(&clients_lock);
 	if (r == -1) {
 		bxt_err("recv msg: fd %d errno %d", client->fd, errno);
 		return -1;
@@ -857,10 +854,14 @@ EXPORT int buxton_set_value(struct buxton_client *client,
 {
 	struct bxt_req *req;
 
+	pthread_mutex_lock(&clients_lock);
 	req = set_value(client, layer, key, val, callback, user_data);
-	if (!req)
+	if (!req) {
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
+	}
 
+	pthread_mutex_unlock(&clients_lock);
 	return 0;
 }
 
@@ -885,19 +886,26 @@ EXPORT int buxton_set_value_sync(struct buxton_client *client,
 
 	memset(&resp, 0, sizeof(resp));
 
+	pthread_mutex_lock(&clients_lock);
 	req = set_value(client, layer, key, val, set_value_sync_cb, &resp);
-	if (!req)
-		return -1;
-
-	r = wait_msg(client, req->msgid);
-	if (r == -1)
-		return -1;
-
-	if (resp.res) {
-		errno = resp.res;
+	if (!req) {
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
 	}
 
+	r = wait_msg(client, req->msgid);
+	if (r == -1) {
+		pthread_mutex_unlock(&clients_lock);
+		return -1;
+	}
+
+	if (resp.res) {
+		errno = resp.res;
+		pthread_mutex_unlock(&clients_lock);
+		return -1;
+	}
+
+	pthread_mutex_unlock(&clients_lock);
 	return 0;
 }
 
@@ -942,10 +950,14 @@ EXPORT int buxton_get_value(struct buxton_client *client,
 {
 	struct bxt_req *req;
 
+	pthread_mutex_lock(&clients_lock);
 	req = get_value(client, layer, key, callback, user_data);
-	if (!req)
+	if (!req) {
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
+	}
 
+	pthread_mutex_unlock(&clients_lock);
 	return 0;
 }
 
@@ -978,21 +990,28 @@ EXPORT int buxton_get_value_sync(struct buxton_client *client,
 
 	memset(&resp, 0, sizeof(resp));
 
+	pthread_mutex_lock(&clients_lock);
 	req = get_value(client, layer, key, get_value_sync_cb, &resp);
-	if (!req)
+	if (!req) {
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
+	}
 
 	r = wait_msg(client, req->msgid);
-	if (r == -1)
+	if (r == -1) {
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
+	}
 
 	if (resp.res) {
 		errno = resp.res;
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
 	}
 
 	*val = resp.val;
 
+	pthread_mutex_unlock(&clients_lock);
 	return 0;
 }
 
@@ -1036,10 +1055,14 @@ EXPORT int buxton_list_keys(struct buxton_client *client,
 {
 	struct bxt_req *req;
 
+	pthread_mutex_lock(&clients_lock);
 	req = list_keys(client, layer, callback, user_data);
-	if (!req)
+	if (!req) {
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
+	}
 
+	pthread_mutex_unlock(&clients_lock);
 	return 0;
 }
 
@@ -1091,16 +1114,22 @@ EXPORT int buxton_list_keys_sync(struct buxton_client *client,
 
 	memset(&resp, 0, sizeof(resp));
 
+	pthread_mutex_lock(&clients_lock);
 	req = list_keys(client, layer, list_keys_sync_cb, &resp);
-	if (!req)
+	if (!req) {
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
+	}
 
 	r = wait_msg(client, req->msgid);
-	if (r == -1)
+	if (r == -1) {
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
+	}
 
 	if (resp.res) {
 		errno = resp.res;
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
 	}
 
@@ -1109,6 +1138,7 @@ EXPORT int buxton_list_keys_sync(struct buxton_client *client,
 	if (len)
 		*len = resp.nmlen;
 
+	pthread_mutex_unlock(&clients_lock);
 	return 0;
 }
 
@@ -1212,21 +1242,28 @@ EXPORT int buxton_register_notification(struct buxton_client *client,
 		return -1;
 	}
 
+	pthread_mutex_lock(&clients_lock);
 	r = find_noti(client, layer, key, &noti);
-	if (r == -1)
+	if (r == -1) {
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
+	}
 
 	if (noti && noti->reg == TRUE) {
 		r = add_noticb(noti, notify, notify_data);
+		pthread_mutex_unlock(&clients_lock);
 		return call_resp(r == -1 ? errno : 0, layer, key,
 				callback, user_data);
 	}
 
 	req = register_noti(client, layer, key, notify, notify_data, callback,
 			user_data);
-	if (!req)
+	if (!req) {
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
+	}
 
+	pthread_mutex_unlock(&clients_lock);
 	return 0;
 }
 
@@ -1255,29 +1292,40 @@ EXPORT int buxton_register_notification_sync(struct buxton_client *client,
 		return -1;
 	}
 
+	pthread_mutex_lock(&clients_lock);
 	r = find_noti(client, layer, key, &noti);
-	if (r == -1)
+	if (r == -1) {
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
+	}
 
-	if (noti && noti->reg == TRUE)
+	if (noti && noti->reg == TRUE) {
+		pthread_mutex_unlock(&clients_lock);
 		return add_noticb(noti, notify, notify_data);
+	}
 
 	memset(&resp, 0, sizeof(resp));
 
 	req = register_noti(client, layer, key, notify, notify_data,
 			reg_noti_sync_cb, &resp);
-	if (!req)
-		return -1;
-
-	r = wait_msg(client, req->msgid);
-	if (r == -1)
-		return -1;
-
-	if (resp.res) {
-		errno = resp.res;
+	if (!req) {
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
 	}
 
+	r = wait_msg(client, req->msgid);
+	if (r == -1) {
+		pthread_mutex_unlock(&clients_lock);
+		return -1;
+	}
+
+	if (resp.res) {
+		errno = resp.res;
+		pthread_mutex_unlock(&clients_lock);
+		return -1;
+	}
+
+	pthread_mutex_unlock(&clients_lock);
 	return 0;
 }
 
@@ -1447,37 +1495,51 @@ EXPORT int buxton_unregister_notification_sync(struct buxton_client *client,
 		return -1;
 	}
 
+	pthread_mutex_lock(&clients_lock);
 	r = find_noti(client, layer, key, &noti);
-	if (r == -1)
+	if (r == -1) {
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
+	}
 
 	if (!noti) {
 		errno = ENOENT;
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
 	}
 
 	r = del_noticb(noti, notify, &cnt);
-	if (r == -1)
+	if (r == -1) {
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
+	}
 
-	if (cnt || noti->reg == FALSE)
+	if (cnt || noti->reg == FALSE) {
+		pthread_mutex_unlock(&clients_lock);
 		return 0;
+	}
 
 	memset(&resp, 0, sizeof(resp));
 
 	req = unregister_noti(client, layer, key, unreg_noti_sync_cb, &resp);
-	if (!req)
-		return -1;
-
-	r = wait_msg(client, req->msgid);
-	if (r == -1)
-		return -1;
-
-	if (resp.res) {
-		errno = resp.res;
+	if (!req) {
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
 	}
 
+	r = wait_msg(client, req->msgid);
+	if (r == -1) {
+		pthread_mutex_unlock(&clients_lock);
+		return -1;
+	}
+
+	if (resp.res) {
+		errno = resp.res;
+		pthread_mutex_unlock(&clients_lock);
+		return -1;
+	}
+
+	pthread_mutex_unlock(&clients_lock);
 	return 0;
 }
 
@@ -1530,11 +1592,15 @@ EXPORT int buxton_create_value(struct buxton_client *client,
 {
 	struct bxt_req *req;
 
+	pthread_mutex_lock(&clients_lock);
 	req = create_value(client, layer, key, read_privilege, write_privilege,
 			val, callback, user_data);
-	if (!req)
+	if (!req) {
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
+	}
 
+	pthread_mutex_unlock(&clients_lock);
 	return 0;
 }
 
@@ -1560,20 +1626,27 @@ EXPORT int buxton_create_value_sync(struct buxton_client *client,
 
 	memset(&resp, 0, sizeof(resp));
 
+	pthread_mutex_lock(&clients_lock);
 	req = create_value(client, layer, key, read_privilege, write_privilege,
 			val, create_value_sync_cb, &resp);
-	if (!req)
-		return -1;
-
-	r = wait_msg(client, req->msgid);
-	if (r == -1)
-		return -1;
-
-	if (resp.res) {
-		errno = resp.res;
+	if (!req) {
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
 	}
 
+	r = wait_msg(client, req->msgid);
+	if (r == -1) {
+		pthread_mutex_unlock(&clients_lock);
+		return -1;
+	}
+
+	if (resp.res) {
+		errno = resp.res;
+		pthread_mutex_unlock(&clients_lock);
+		return -1;
+	}
+
+	pthread_mutex_unlock(&clients_lock);
 	return 0;
 }
 
@@ -1618,10 +1691,14 @@ EXPORT int buxton_unset_value(struct buxton_client *client,
 {
 	struct bxt_req *req;
 
+	pthread_mutex_lock(&clients_lock);
 	req = unset_value(client, layer, key, callback, user_data);
-	if (!req)
+	if (!req) {
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
+	}
 
+	pthread_mutex_unlock(&clients_lock);
 	return 0;
 }
 
@@ -1645,19 +1722,26 @@ EXPORT int buxton_unset_value_sync(struct buxton_client *client,
 
 	memset(&resp, 0, sizeof(resp));
 
+	pthread_mutex_lock(&clients_lock);
 	req = unset_value(client, layer, key, unset_value_sync_cb, &resp);
-	if (!req)
-		return -1;
-
-	r = wait_msg(client, req->msgid);
-	if (r == -1)
-		return -1;
-
-	if (resp.res) {
-		errno = resp.res;
+	if (!req) {
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
 	}
 
+	r = wait_msg(client, req->msgid);
+	if (r == -1) {
+		pthread_mutex_unlock(&clients_lock);
+		return -1;
+	}
+
+	if (resp.res) {
+		errno = resp.res;
+		pthread_mutex_unlock(&clients_lock);
+		return -1;
+	}
+
+	pthread_mutex_unlock(&clients_lock);
 	return 0;
 }
 
@@ -1716,11 +1800,15 @@ EXPORT int buxton_set_privilege(struct buxton_client *client,
 {
 	struct bxt_req *req;
 
+	pthread_mutex_lock(&clients_lock);
 	req = set_priv(client, layer, key, type, privilege,
 			callback, user_data);
-	if (!req)
+	if (!req) {
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
+	}
 
+	pthread_mutex_unlock(&clients_lock);
 	return 0;
 }
 
@@ -1746,20 +1834,27 @@ EXPORT int buxton_set_privilege_sync(struct buxton_client *client,
 
 	memset(&resp, 0, sizeof(resp));
 
+	pthread_mutex_lock(&clients_lock);
 	req = set_priv(client, layer, key, type, privilege,
 			set_priv_sync_cb, &resp);
-	if (!req)
-		return -1;
-
-	r = wait_msg(client, req->msgid);
-	if (r == -1)
-		return -1;
-
-	if (resp.res) {
-		errno = resp.res;
+	if (!req) {
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
 	}
 
+	r = wait_msg(client, req->msgid);
+	if (r == -1) {
+		pthread_mutex_unlock(&clients_lock);
+		return -1;
+	}
+
+	if (resp.res) {
+		errno = resp.res;
+		pthread_mutex_unlock(&clients_lock);
+		return -1;
+	}
+
+	pthread_mutex_unlock(&clients_lock);
 	return 0;
 }
 
@@ -1811,10 +1906,14 @@ EXPORT int buxton_get_privilege(struct buxton_client *client,
 {
 	struct bxt_req *req;
 
+	pthread_mutex_lock(&clients_lock);
 	req = get_priv(client, layer, key, type, callback, user_data);
-	if (!req)
+	if (!req) {
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
+	}
 
+	pthread_mutex_unlock(&clients_lock);
 	return 0;
 }
 
@@ -1848,16 +1947,20 @@ EXPORT int buxton_get_privilege_sync(struct buxton_client *client,
 
 	memset(&resp, 0, sizeof(resp));
 
+	pthread_mutex_lock(&clients_lock);
 	req = get_priv(client, layer, key, type, get_priv_sync_cb, &resp);
 	if (!req)
 		return -1;
 
 	r = wait_msg(client, req->msgid);
-	if (r == -1)
+	if (r == -1) {
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
+	}
 
 	if (resp.res) {
 		errno = resp.res;
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
 	}
 
@@ -1865,6 +1968,7 @@ EXPORT int buxton_get_privilege_sync(struct buxton_client *client,
 	resp.val->value.s = NULL;
 	buxton_value_free(resp.val);
 
+	pthread_mutex_unlock(&clients_lock);
 	return 0;
 }
 
@@ -1925,10 +2029,14 @@ EXPORT int buxton_enable_security(struct buxton_client *client,
 {
 	struct bxt_req *req;
 
+	pthread_mutex_lock(&clients_lock);
 	req = security_control(client, TRUE, callback, user_data);
-	if (!req)
+	if (!req) {
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
+	}
 
+	pthread_mutex_unlock(&clients_lock);
 	return 0;
 }
 
@@ -1938,19 +2046,26 @@ EXPORT int buxton_enable_security_sync(struct buxton_client *client)
 	struct bxt_req *req;
 	struct response resp;
 
+	pthread_mutex_lock(&clients_lock);
 	req = security_control(client, TRUE, security_sync_cb, &resp);
-	if (!req)
-		return -1;
-
-	r = wait_msg(client, req->msgid);
-	if (r == -1)
-		return -1;
-
-	if (resp.res) {
-		errno = resp.res;
+	if (!req) {
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
 	}
 
+	r = wait_msg(client, req->msgid);
+	if (r == -1) {
+		pthread_mutex_unlock(&clients_lock);
+		return -1;
+	}
+
+	if (resp.res) {
+		errno = resp.res;
+		pthread_mutex_unlock(&clients_lock);
+		return -1;
+	}
+
+	pthread_mutex_unlock(&clients_lock);
 	return 0;
 }
 
@@ -1959,10 +2074,14 @@ EXPORT int buxton_disable_security(struct buxton_client *client,
 {
 	struct bxt_req *req;
 
+	pthread_mutex_lock(&clients_lock);
 	req = security_control(client, FALSE, callback, user_data);
-	if (!req)
+	if (!req) {
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
+	}
 
+	pthread_mutex_unlock(&clients_lock);
 	return 0;
 }
 
@@ -1972,19 +2091,26 @@ EXPORT int buxton_disable_security_sync(struct buxton_client *client)
 	struct bxt_req *req;
 	struct response resp;
 
+	pthread_mutex_lock(&clients_lock);
 	req = security_control(client, FALSE, security_sync_cb, &resp);
-	if (!req)
-		return -1;
-
-	r = wait_msg(client, req->msgid);
-	if (r == -1)
-		return -1;
-
-	if (resp.res) {
-		errno = resp.res;
+	if (!req) {
+		pthread_mutex_unlock(&clients_lock);
 		return -1;
 	}
 
+	r = wait_msg(client, req->msgid);
+	if (r == -1) {
+		pthread_mutex_unlock(&clients_lock);
+		return -1;
+	}
+
+	if (resp.res) {
+		errno = resp.res;
+		pthread_mutex_unlock(&clients_lock);
+		return -1;
+	}
+
+	pthread_mutex_unlock(&clients_lock);
 	return 0;
 }
 
@@ -2120,7 +2246,6 @@ static gboolean recv_cb(gint fd, GIOCondition cond, gpointer data)
 		pthread_mutex_unlock(&clients_lock);
 		return G_SOURCE_REMOVE;
 	}
-	pthread_mutex_unlock(&clients_lock);
 
 	r = proc_msg(cli);
 	if (r == -1) {
@@ -2128,6 +2253,7 @@ static gboolean recv_cb(gint fd, GIOCondition cond, gpointer data)
 		g_idle_add(close_conn, cli);
 		return G_SOURCE_REMOVE;
 	}
+	pthread_mutex_unlock(&clients_lock);
 
 	return G_SOURCE_CONTINUE;
 }
