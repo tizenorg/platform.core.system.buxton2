@@ -84,7 +84,9 @@ struct buxton_client {
 	void *st_data;
 
 	GHashTable *req_cbs; /* key: msgid, value: bxt_req */
+	pthread_mutex_t req_lock;
 	GHashTable *noti_cbs; /* key: keyname, value: bxt_noti */
+	pthread_mutex_t noti_lock;
 };
 
 static GList *clients; /* data: buxton_client */
@@ -404,12 +406,14 @@ static int find_noti(struct buxton_client *client,
 	if (!lykey)
 		return -1;
 
+	pthread_mutex_lock(&client->noti_lock);
 	_noti = g_hash_table_lookup(client->noti_cbs, lykey);
 
 	free(lykey);
 
 	*noti = _noti;
 
+	pthread_mutex_unlock(&client->noti_lock);
 	return 0;
 }
 
@@ -481,6 +485,7 @@ static int add_noti(struct buxton_client *client,
 	if (!lykey)
 		return -1;
 
+	pthread_mutex_lock(&client->noti_lock);
 	_noti = g_hash_table_lookup(client->noti_cbs, lykey);
 	if (_noti) {
 		free(lykey);
@@ -498,6 +503,7 @@ static int add_noti(struct buxton_client *client,
 
 	*noti = _noti;
 
+	pthread_mutex_unlock(&client->noti_lock);
 	return 0;
 }
 
@@ -559,7 +565,9 @@ static void del_noti(struct buxton_client *client,
 	if (!lykey)
 		return;
 
+	pthread_mutex_lock(&client->noti_lock);
 	g_hash_table_remove(client->noti_cbs, lykey);
+	pthread_mutex_unlock(&client->noti_lock);
 
 	free(lykey);
 }
@@ -611,10 +619,12 @@ static int proc_msg_res(struct buxton_client *client, uint8_t *data, int len)
 		return -1;
 	}
 
+	pthread_mutex_lock(&client->req_lock);
 	req = g_hash_table_lookup(client->req_cbs,
 			GUINT_TO_POINTER(resp.msgid));
 	if (!req) {
 		bxt_err("proc msg: msgid %d not exist", resp.msgid);
+		pthread_mutex_unlock(&client->req_lock);
 		free_response(&resp);
 		return 0;
 	}
@@ -645,6 +655,7 @@ static int proc_msg_res(struct buxton_client *client, uint8_t *data, int len)
 	free_response(&resp);
 
 	g_hash_table_remove(client->req_cbs, GUINT_TO_POINTER(resp.msgid));
+	pthread_mutex_unlock(&client->req_lock);
 
 	return 0;
 }
@@ -751,17 +762,23 @@ static int wait_msg(struct buxton_client *client, guint32 msgid)
 
 		/* poll or proc error */
 		if (r == -1) {
+			pthread_mutex_lock(&client->req_lock);
 			g_hash_table_remove(client->req_cbs,
 					GUINT_TO_POINTER(msgid));
+			pthread_mutex_unlock(&client->req_lock);
 			return -1;
 		}
 
+		pthread_mutex_lock(&client->req_lock);
 		req = g_hash_table_lookup(client->req_cbs,
 				GUINT_TO_POINTER(msgid));
 		/* req is processed */
-		if (!req)
+		if (!req) {
+			pthread_mutex_unlock(&client->req_lock);
 			return 0;
+		}
 
+		pthread_mutex_unlock(&client->req_lock);
 		clock_gettime(CLOCK_MONOTONIC, &t);
 		ms = TS_SUB(&to, &t);
 	}
@@ -769,7 +786,9 @@ static int wait_msg(struct buxton_client *client, guint32 msgid)
 	bxt_err("wait response: timeout");
 	errno = ETIMEDOUT;
 
+	pthread_mutex_lock(&client->req_lock);
 	g_hash_table_remove(client->req_cbs, GUINT_TO_POINTER(msgid));
+	pthread_mutex_unlock(&client->req_lock);
 
 	return -1;
 }
@@ -838,15 +857,18 @@ static struct bxt_req *set_value(struct buxton_client *client,
 	rqst.key = (char *)key;
 	rqst.val = (struct buxton_value *)val;
 
+	pthread_mutex_lock(&client->req_lock);
 	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
 
 	r = send_req(client, &rqst);
 	if (r == -1) {
 		g_hash_table_remove(client->req_cbs,
 				GUINT_TO_POINTER(req->msgid));
+		pthread_mutex_unlock(&client->req_lock);
 		return NULL;
 	}
 
+	pthread_mutex_unlock(&client->req_lock);
 	return req;
 }
 
@@ -924,15 +946,18 @@ static struct bxt_req *get_value(struct buxton_client *client,
 	rqst.layer = req->layer;
 	rqst.key = (char *)key;
 
+	pthread_mutex_lock(&client->req_lock);
 	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
 
 	r = send_req(client, &rqst);
 	if (r == -1) {
 		g_hash_table_remove(client->req_cbs,
 				GUINT_TO_POINTER(req->msgid));
+		pthread_mutex_unlock(&client->req_lock);
 		return NULL;
 	}
 
+	pthread_mutex_unlock(&client->req_lock);
 	return req;
 }
 
@@ -1018,15 +1043,18 @@ static struct bxt_req *list_keys(struct buxton_client *client,
 	rqst.msgid = req->msgid;
 	rqst.layer = req->layer;
 
+	pthread_mutex_lock(&client->req_lock);
 	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
 
 	r = send_req(client, &rqst);
 	if (r == -1) {
 		g_hash_table_remove(client->req_cbs,
 				GUINT_TO_POINTER(req->msgid));
+		pthread_mutex_unlock(&client->req_lock);
 		return NULL;
 	}
 
+	pthread_mutex_unlock(&client->req_lock);
 	return req;
 }
 
@@ -1186,15 +1214,18 @@ static struct bxt_req *register_noti(struct buxton_client *client,
 	rqst.layer = req->layer;
 	rqst.key = (char *)key;
 
+	pthread_mutex_lock(&client->req_lock);
 	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
 
 	r = send_req(client, &rqst);
 	if (r == -1) {
 		g_hash_table_remove(client->req_cbs,
 				GUINT_TO_POINTER(req->msgid));
+		pthread_mutex_unlock(&client->req_lock);
 		return NULL;
 	}
 
+	pthread_mutex_unlock(&client->req_lock);
 	return req;
 }
 
@@ -1371,15 +1402,18 @@ static struct bxt_req *unregister_noti(struct buxton_client *client,
 	rqst.layer = req->layer;
 	rqst.key = (char *)key;
 
+	pthread_mutex_lock(&client->req_lock);
 	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
 
 	r = send_req(client, &rqst);
 	if (r == -1) {
 		g_hash_table_remove(client->req_cbs,
 				GUINT_TO_POINTER(req->msgid));
+		pthread_mutex_unlock(&client->req_lock);
 		return NULL;
 	}
 
+	pthread_mutex_unlock(&client->req_lock);
 	return req;
 }
 
@@ -1510,15 +1544,18 @@ static struct bxt_req *create_value(struct buxton_client *client,
 	rqst.wpriv = (char *)write_privilege;
 	rqst.val = (struct buxton_value *)val;
 
+	pthread_mutex_lock(&client->req_lock);
 	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
 
 	r = send_req(client, &rqst);
 	if (r == -1) {
 		g_hash_table_remove(client->req_cbs,
 				GUINT_TO_POINTER(req->msgid));
+		pthread_mutex_unlock(&client->req_lock);
 		return NULL;
 	}
 
+	pthread_mutex_unlock(&client->req_lock);
 	return req;
 }
 
@@ -1600,15 +1637,18 @@ static struct bxt_req *unset_value(struct buxton_client *client,
 	rqst.layer = req->layer;
 	rqst.key = (char *)key;
 
+	pthread_mutex_lock(&client->req_lock);
 	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
 
 	r = send_req(client, &rqst);
 	if (r == -1) {
 		g_hash_table_remove(client->req_cbs,
 				GUINT_TO_POINTER(req->msgid));
+		pthread_mutex_lock(&client->req_lock);
 		return NULL;
 	}
 
+	pthread_mutex_unlock(&client->req_lock);
 	return req;
 }
 
@@ -1696,15 +1736,18 @@ static struct bxt_req *set_priv(struct buxton_client *client,
 	val.type = BUXTON_TYPE_PRIVILEGE;
 	val.value.s = (char *)privilege;
 
+	pthread_mutex_lock(&client->req_lock);
 	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
 
 	r = send_req(client, &rqst);
 	if (r == -1) {
 		g_hash_table_remove(client->req_cbs,
 				GUINT_TO_POINTER(req->msgid));
+		pthread_mutex_unlock(&client->req_lock);
 		return NULL;
 	}
 
+	pthread_mutex_unlock(&client->req_lock);
 	return req;
 }
 
@@ -1792,15 +1835,18 @@ static struct bxt_req *get_priv(struct buxton_client *client,
 	rqst.layer = req->layer;
 	rqst.key = (char *)key;
 
+	pthread_mutex_lock(&client->req_lock);
 	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
 
 	r = send_req(client, &rqst);
 	if (r == -1) {
 		g_hash_table_remove(client->req_cbs,
 				GUINT_TO_POINTER(req->msgid));
+		pthread_mutex_unlock(&client->req_lock);
 		return NULL;
 	}
 
+	pthread_mutex_unlock(&client->req_lock);
 	return req;
 }
 
@@ -1906,6 +1952,7 @@ static struct bxt_req *security_control(struct buxton_client *client,
 	val.type = BUXTON_TYPE_BOOLEAN;
 	val.value.b = enable;
 
+	pthread_mutex_lock(&client->req_lock);
 	g_hash_table_insert(client->req_cbs, GUINT_TO_POINTER(req->msgid), req);
 
 	r = send_req(client, &rqst);
@@ -1914,9 +1961,11 @@ static struct bxt_req *security_control(struct buxton_client *client,
 	if (r == -1) {
 		g_hash_table_remove(client->req_cbs,
 				GUINT_TO_POINTER(req->msgid));
+		pthread_mutex_unlock(&client->req_lock);
 		return NULL;
 	}
 
+	pthread_mutex_unlock(&client->req_lock);
 	return req;
 }
 
@@ -2050,11 +2099,15 @@ static void free_client(struct buxton_client *cli)
 	pthread_mutex_lock(&clients_lock);
 	clients = g_list_remove(clients, cli);
 
+	pthread_mutex_lock(&cli->req_lock);
 	if (cli->req_cbs)
 		g_hash_table_destroy(cli->req_cbs);
+	pthread_mutex_unlock(&cli->req_lock);
 
+	pthread_mutex_lock(&cli->noti_lock);
 	if (cli->noti_cbs)
 		g_hash_table_destroy(cli->noti_cbs);
+	pthread_mutex_unlock(&cli->noti_lock);
 
 	free(cli);
 	pthread_mutex_unlock(&clients_lock);
@@ -2170,21 +2223,29 @@ EXPORT int buxton_open_full(struct buxton_client **client, bool attach_fd,
 	cli->st_callback = callback;
 	cli->st_data = user_data;
 
+	pthread_mutex_init(&cli->req_lock, NULL);
+	pthread_mutex_lock(&cli->req_lock);
 	cli->req_cbs = g_hash_table_new_full(g_direct_hash, g_direct_equal,
 			NULL, (GDestroyNotify)free_req);
 	if (!cli->req_cbs) {
 		free_client(cli);
 		errno = ENOMEM;
+		pthread_mutex_unlock(&cli->req_lock);
 		return -1;
 	}
+	pthread_mutex_unlock(&cli->req_lock);
 
+	pthread_mutex_init(&cli->noti_lock, NULL);
+	pthread_mutex_lock(&cli->noti_lock);
 	cli->noti_cbs = g_hash_table_new_full(g_str_hash, g_str_equal,
 			NULL, (GDestroyNotify)free_noti);
 	if (!cli->noti_cbs) {
 		free_client(cli);
 		errno = ENOMEM;
+		pthread_mutex_unlock(&cli->noti_lock);
 		return -1;
 	}
+	pthread_mutex_unlock(&cli->noti_lock);
 
 	cli->fd = connect_server(SOCKPATH);
 	if (cli->fd == -1) {
