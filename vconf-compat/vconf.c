@@ -52,6 +52,7 @@ struct noti_cb {
 	vconf_callback_fn cb;
 	void *user_data;
 	gboolean deleted;
+	int refcnt;
 };
 
 static bool last_result;
@@ -156,7 +157,7 @@ static gboolean free_noti_cb(gpointer data)
 	for (l = list, n = g_list_next(l); l; l = n, n = g_list_next(n)) {
 		struct noti_cb *noticb = l->data;
 
-		if (!noticb->deleted)
+		if (!noticb->deleted && noticb->refcnt == 0)
 			continue;
 
 		list = g_list_delete_link(list, l);
@@ -374,6 +375,7 @@ static int add_noti(struct noti *noti, vconf_callback_fn cb, void *user_data)
 		if (noticb->deleted) { /* reuse */
 			noticb->user_data = user_data;
 			noticb->deleted = FALSE;
+			noticb->refcnt = 1;
 			return 0;
 		}
 
@@ -388,6 +390,7 @@ static int add_noti(struct noti *noti, vconf_callback_fn cb, void *user_data)
 	noticb->cb = cb;
 	noticb->user_data = user_data;
 	noticb->deleted = FALSE;
+	noticb->refcnt = 1;
 
 	noti->noti_list = g_list_append(noti->noti_list, noticb);
 
@@ -526,6 +529,7 @@ EXPORT int vconf_ignore_key_changed(const char *key, vconf_callback_fn cb)
 	}
 
 	noticb->deleted = TRUE;
+	noticb->refcnt--;
 
 	cnt = unregister_noti(noti);
 	pthread_mutex_unlock(&vconf_lock);
