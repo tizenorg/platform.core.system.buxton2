@@ -1325,6 +1325,10 @@ static gboolean del_noticb_cb(gpointer data)
 	assert(noti);
 
 	pthread_mutex_lock(&noti->cbs_lock);
+	if (noti->id == 0) {
+		pthread_mutex_unlock(&noti->cbs_lock);
+		return G_SOURCE_REMOVE;
+	}
 	for (l = noti->callbacks, ll = g_list_next(l); l;
 			l = ll, ll = g_list_next(ll)) {
 		noticb = l->data;
@@ -1335,10 +1339,10 @@ static gboolean del_noticb_cb(gpointer data)
 			free(noticb);
 		}
 	}
-	pthread_mutex_unlock(&noti->cbs_lock);
 
 	noti->id = 0;
 
+	pthread_mutex_unlock(&noti->cbs_lock);
 	return G_SOURCE_REMOVE;
 }
 
@@ -2047,12 +2051,12 @@ static void free_noti(struct bxt_noti *noti)
 
 	pthread_mutex_lock(&noti->cbs_lock);
 	g_list_free_full(noti->callbacks, (GDestroyNotify)free);
-	pthread_mutex_unlock(&noti->cbs_lock);
 
 	if (noti->id) {
 		g_source_remove(noti->id);
 		noti->id = 0;
 	}
+	pthread_mutex_unlock(&noti->cbs_lock);
 
 	free(noti->layer_key);
 	free(noti);
