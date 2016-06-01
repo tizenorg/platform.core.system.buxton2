@@ -51,7 +51,7 @@ struct noti {
 struct noti_cb {
 	vconf_callback_fn cb;
 	void *user_data;
-	gboolean deleted;
+	int ref_cnt;
 };
 
 static bool last_result;
@@ -144,40 +144,22 @@ static struct buxton_layer *get_layer(const char *key)
 	return system_layer;
 }
 
-static gboolean free_noti_cb(gpointer data)
-{
-	GList *list = data;
-	GList *l;
-	GList *n;
-
-	if (!list)
-		return G_SOURCE_REMOVE;
-
-	for (l = list, n = g_list_next(l); l; l = n, n = g_list_next(n)) {
-		struct noti_cb *noticb = l->data;
-
-		if (!noticb->deleted)
-			continue;
-
-		list = g_list_delete_link(list, l);
-		free(noticb);
-	}
-
-	return G_SOURCE_REMOVE;
-}
-
 static void free_noti(struct noti *noti)
 {
 	GList *l;
+	GList *n;
 
 	assert(noti);
 
-	for (l = noti->noti_list; l; l = g_list_next(l)) {
+	for (l = noti->noti_list, n = g_list_next(l);
+			l; l = n, n = g_list_next(n)) {
 		struct noti_cb *noticb = l->data;
-
-		noticb->deleted = TRUE;
+		noticb->ref_cnt--;
+		if (noticb->ref_cnt == 0) {
+			noti->noti_list = g_list_delete_link(noti->noti_list, l);
+			free(noticb);
+		}
 	}
-	g_idle_add(free_noti_cb, noti->noti_list);
 
 	free(noti->key);
 	free(noti);
@@ -315,12 +297,56 @@ static void to_vconf_t(const struct buxton_value *val, keynode_t *node)
 	}
 }
 
+static GList *copy_noti_list(GList *noti_list)
+{
+	GList *l;
+	GList *copy;
+
+	if (!noti_list)
+		return NULL;
+
+	pthread_mutex_lock(&vconf_lock);
+	for (l = noti_list; l; l = g_list_next(l)) {
+		struct noti_cb *noticb;
+		noticb = noti_list->data;
+		noticb->ref_cnt++;
+	}
+	copy = g_list_copy(noti_list);
+	pthread_mutex_unlock(&vconf_lock);
+
+	return copy;
+}
+
+static GList *free_copy_list(GList *noti_list, GList *copy_list)
+{
+	GList *l;
+	GList *ll;
+
+	pthread_mutex_lock(&vconf_lock);
+	g_list_free(copy_list);
+
+	for (l = noti_list, ll = g_list_next(l); l;
+			l = ll, ll = g_list_next(ll)) {
+		struct noti_cb *noticb = l->data;
+
+		noticb->ref_cnt--;
+		if (noticb->ref_cnt == 0) {
+			noti_list = g_list_delete_link(noti_list, l);
+			free(noticb);
+		}
+	}
+	pthread_mutex_unlock(&vconf_lock);
+
+	return noti_list;
+}
+
 static void notify_cb(const struct buxton_layer *layer, const char *key,
 		const struct buxton_value *val, void *user_data)
 {
 	struct noti *noti = user_data;
 	keynode_t *node;
 	GList *l;
+	GList *copy;
 
 	assert(noti);
 
@@ -331,15 +357,16 @@ static void notify_cb(const struct buxton_layer *layer, const char *key,
 	node->keyname = (char *)key;
 	to_vconf_t(val, node);
 
-	for (l = noti->noti_list; l; l = g_list_next(l)) {
-		struct noti_cb *noticb = l->data;
+	copy = copy_noti_list(noti->noti_list);
 
-		if (noticb->deleted)
-			continue;
+	for (l = copy; l; l = g_list_next(l)) {
+		struct noti_cb *noticb = l->data;
 
 		assert(noticb->cb);
 		noticb->cb(node, noticb->user_data);
 	}
+
+	noti->noti_list = free_copy_list(noti->noti_list, copy);
 
 	free(node);
 }
@@ -371,12 +398,6 @@ static int add_noti(struct noti *noti, vconf_callback_fn cb, void *user_data)
 
 	noticb = find_noti_cb(noti, cb);
 	if (noticb) {
-		if (noticb->deleted) { /* reuse */
-			noticb->user_data = user_data;
-			noticb->deleted = FALSE;
-			return 0;
-		}
-
 		errno = EEXIST;
 		return -1;
 	}
@@ -387,7 +408,7 @@ static int add_noti(struct noti *noti, vconf_callback_fn cb, void *user_data)
 
 	noticb->cb = cb;
 	noticb->user_data = user_data;
-	noticb->deleted = FALSE;
+	noticb->ref_cnt = 1;
 
 	noti->noti_list = g_list_append(noti->noti_list, noticb);
 
@@ -484,10 +505,7 @@ static int unregister_noti(struct noti *noti)
 
 	cnt = 0;
 	for (l = noti->noti_list; l; l = g_list_next(l)) {
-		struct noti_cb *noticb = l->data;
-
-		if (!noticb->deleted)
-			cnt++;
+		cnt++;
 	}
 
 	if (cnt > 0)
@@ -525,7 +543,11 @@ EXPORT int vconf_ignore_key_changed(const char *key, vconf_callback_fn cb)
 		return -1;
 	}
 
-	noticb->deleted = TRUE;
+	noticb->ref_cnt--;
+	if (noticb->ref_cnt == 0) {
+		noti->noti_list = g_list_remove(noti->noti_list, noticb);
+		free(noticb);
+	}
 
 	cnt = unregister_noti(noti);
 	pthread_mutex_unlock(&vconf_lock);
