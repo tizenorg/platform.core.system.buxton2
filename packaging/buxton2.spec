@@ -1,3 +1,5 @@
+%define dbdir %{_localstatedir}/lib/%{name}
+
 Name:           buxton2
 Version:        1.1
 Release:        0
@@ -21,6 +23,8 @@ Requires(post): /usr/bin/chown
 Requires(post): /usr/sbin/useradd
 Requires(post): /usr/sbin/groupadd
 Requires(post): /usr/bin/chsmack
+Requires(posttrans): /usr/bin/chsmack
+Requires(posttrans): /usr/bin/chmod
 Obsoletes:      buxton
 Provides:       buxton
 
@@ -130,18 +134,22 @@ ln -sf ../%{name}.socket %{buildroot}%{_unitdir}/sockets.target.wants/
 
 %post
 /sbin/ldconfig
-dbdir="%{_localstatedir}/lib/%{name}"
 
 # buxtond runs as user buxton of group buxton
 # create it on need!
 getent group buxton > /dev/null || groupadd -r buxton
-getent passwd buxton > /dev/null || useradd -r -g buxton -d "${dbdir}" buxton
+getent passwd buxton > /dev/null || useradd -r -g buxton -d "%{dbdir}" buxton
 
 # The initial DBs will not have the correct labels and
 # permissions when created in postinstall during image
 # creation, so we set these file attributes here.
-chown -R buxton:buxton "${dbdir}"
-chsmack -a System "${dbdir}"
+chown -R buxton:buxton "%{dbdir}"
+chsmack -a System "%{dbdir}"
+chsmack -t "%{dbdir}"
+
+%posttrans
+chmod 0600 %{dbdir}/*
+chsmack -a System %{dbdir}/*
 
 %postun -p /sbin/ldconfig
 
