@@ -21,6 +21,8 @@ Requires(post): /usr/bin/chown
 Requires(post): /usr/sbin/useradd
 Requires(post): /usr/sbin/groupadd
 Requires(post): /usr/bin/chsmack
+Requires(posttrans): /usr/bin/chsmack
+Requires(posttrans): /usr/bin/chmod
 Obsoletes:      buxton
 Provides:       buxton
 
@@ -142,6 +144,11 @@ getent passwd buxton > /dev/null || useradd -r -g buxton -d "${dbdir}" buxton
 # creation, so we set these file attributes here.
 chown -R buxton:buxton "${dbdir}"
 chsmack -a System "${dbdir}"
+chsmack -t "${dbdir}"
+
+%posttrans
+chmod 0600 ${dbdir}/*
+chsmack -a System ${dbdir}/*
 
 %postun -p /sbin/ldconfig
 
