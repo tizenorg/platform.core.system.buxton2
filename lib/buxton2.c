@@ -425,8 +425,7 @@ static GList *copy_noti_callbacks(GList *callbacks)
 		return NULL;
 
 	for (l = callbacks; l; l = g_list_next(l)) {
-		struct bxt_noti_cb *noticb;
-		noticb = callbacks->data;
+		struct bxt_noti_cb *noticb = l->data;
 		noticb->ref_cnt++;
 	}
 	copy = g_list_copy(callbacks);

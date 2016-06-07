@@ -307,8 +307,7 @@ static GList *copy_noti_list(GList *noti_list)
 
 	pthread_mutex_lock(&vconf_lock);
 	for (l = noti_list; l; l = g_list_next(l)) {
-		struct noti_cb *noticb;
-		noticb = noti_list->data;
+		struct noti_cb *noticb = l->data;
 		noticb->ref_cnt++;
 	}
 	copy = g_list_copy(noti_list);
@@ -511,8 +510,6 @@ static int unregister_noti(struct noti *noti)
 	if (cnt > 0)
 		return cnt;
 
-	g_hash_table_remove(noti_tbl, noti->key);
-
 	return 0;
 }
 
@@ -559,6 +556,12 @@ EXPORT int vconf_ignore_key_changed(const char *key, vconf_callback_fn cb)
 			key, notify_cb);
 	if (r == -1)
 		LOGE("unregister error '%s' %d", noti->key, errno);
+
+	pthread_mutex_lock(&vconf_lock);
+	noti = g_hash_table_lookup(noti_tbl, key);
+	if (noti)
+		g_hash_table_remove(noti_tbl, key);
+	pthread_mutex_unlock(&vconf_lock);
 
 	/* decrease reference count */
 	_close_for_noti();
