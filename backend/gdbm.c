@@ -43,6 +43,8 @@ static GDBM_FILE open_gdbm(const char *dbpath)
 {
 	GDBM_FILE db;
 	char *nm;
+	int cache_size;
+	int r;
 
 	assert(dbpath);
 
@@ -69,6 +71,11 @@ static GDBM_FILE open_gdbm(const char *dbpath)
 		free(nm);
 		return NULL;
 	}
+
+	cache_size = 50;
+	r = gdbm_setopt(db, GDBM_CACHESIZE, &cache_size, sizeof(cache_size));
+	if (r == -1)
+		bxt_err("Set option failed: %s", gdbm_strerror(gdbm_errno));
 
 	g_hash_table_insert(dbs, nm, db);
 
