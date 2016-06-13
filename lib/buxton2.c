@@ -1652,7 +1652,7 @@ static struct bxt_req *unset_value(struct buxton_client *client,
 	if (r == -1) {
 		g_hash_table_remove(client->req_cbs,
 				GUINT_TO_POINTER(req->msgid));
-		pthread_mutex_lock(&client->lock);
+		pthread_mutex_unlock(&client->lock);
 		return NULL;
 	}
 
@@ -2234,17 +2234,17 @@ EXPORT int buxton_open_full(struct buxton_client **client, bool attach_fd,
 	cli->req_cbs = g_hash_table_new_full(g_direct_hash, g_direct_equal,
 			NULL, (GDestroyNotify)free_req);
 	if (!cli->req_cbs) {
+		pthread_mutex_unlock(&cli->lock);
 		free_client(cli);
 		errno = ENOMEM;
-		pthread_mutex_unlock(&cli->lock);
 		return -1;
 	}
 	cli->noti_cbs = g_hash_table_new_full(g_str_hash, g_str_equal,
 			NULL, (GDestroyNotify)free_noti);
 	if (!cli->noti_cbs) {
+		pthread_mutex_unlock(&cli->lock);
 		free_client(cli);
 		errno = ENOMEM;
-		pthread_mutex_unlock(&cli->lock);
 		return -1;
 	}
 	pthread_mutex_unlock(&cli->lock);
