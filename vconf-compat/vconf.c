@@ -1327,6 +1327,7 @@ EXPORT int vconf_unset(const char *in_key)
 	if (getuid() != 0)
 		return VCONF_ERROR_NOT_SUPPORTED;
 
+	/* LCOV_EXCL_START */
 	if (!in_key) {
 		errno = EINVAL;
 		return -1;
@@ -1341,6 +1342,7 @@ EXPORT int vconf_unset(const char *in_key)
 		LOGE("unset value: key '%s' errno %d", in_key, errno);
 
 	_close(client, layer);
+	/* LCOV_EXCL_STOP */
 
 	return r;
 }
@@ -1358,6 +1360,7 @@ EXPORT int vconf_unset_recursive(const char *in_dir)
 	if (getuid() != 0)
 		return VCONF_ERROR_NOT_SUPPORTED;
 
+	/* LCOV_EXCL_START */
 	if (!in_dir) {
 		errno = EINVAL;
 		return -1;
@@ -1394,6 +1397,7 @@ EXPORT int vconf_unset_recursive(const char *in_dir)
 
 	buxton_free_keys(names);
 	_close(client, layer);
+	/* LCOV_EXCL_STOP */
 
 	return 0;
 }
