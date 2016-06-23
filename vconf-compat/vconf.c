@@ -42,6 +42,7 @@ static struct buxton_client *noti_client;
 static struct buxton_layer *system_layer;
 static struct buxton_layer *memory_layer;
 static GHashTable *noti_tbl;
+static GAsyncQueue *cbs_queue;
 
 struct noti {
 	char *key;
@@ -54,7 +55,26 @@ struct noti_cb {
 	int ref_cnt;
 };
 
+struct cbs_queue_item {
+	keynode_t *node;
+	vconf_callback_fn cb;
+	void *user_data;
+};
+
 static bool last_result;
+
+static void free_keynode(struct _keynode_t *keynode)
+{
+	if (!keynode)
+		return;
+
+	if (keynode->type == VCONF_TYPE_STRING)
+		free(keynode->value.s);
+
+	free(keynode->keyname);
+	free(keynode);
+}
+
 
 EXPORT char *vconf_keynode_get_name(keynode_t *keynode)
 {
@@ -165,6 +185,12 @@ static void free_noti(struct noti *noti)
 	free(noti);
 }
 
+static void free_cbs(struct cbs_queue_item *item)
+{
+	free_keynode(item->node);
+	free(item);
+}
+
 static void _close_for_noti(void)
 {
 	pthread_mutex_lock(&vconf_lock);
@@ -183,6 +209,8 @@ static void _close_for_noti(void)
 
 	g_hash_table_destroy(noti_tbl);
 	noti_tbl = NULL;
+
+	g_async_queue_unref(cbs_queue);
 
 	buxton_close(noti_client);
 	noti_client = NULL;
@@ -214,6 +242,8 @@ static int _open_for_noti(void)
 
 	system_layer = buxton_create_layer("system");
 	memory_layer = buxton_create_layer("memory");
+
+	cbs_queue = g_async_queue_new_full((GDestroyNotify)free_cbs);
 
 	pthread_mutex_unlock(&vconf_lock);
 	return 0;
@@ -251,6 +281,7 @@ static void to_vconf_t(const struct buxton_value *val, keynode_t *node)
 	uint32_t u;
 	int64_t i64;
 	uint64_t u64;
+	const char *s;
 
 	assert(val);
 	assert(node);
@@ -262,7 +293,11 @@ static void to_vconf_t(const struct buxton_value *val, keynode_t *node)
 	switch (type) {
 	case BUXTON_TYPE_STRING:
 		node->type = VCONF_TYPE_STRING;
-		buxton_value_get_string(val, (const char **)&node->value.s);
+		r = buxton_value_get_string(val, &s);
+		if (r != -1) {
+			if (s)
+				node->value.s = strdup(s);
+		}
 		break;
 	case BUXTON_TYPE_INT32:
 		node->type = VCONF_TYPE_INT;
@@ -339,35 +374,64 @@ static GList *free_copy_list(GList *noti_list, GList *copy_list)
 	return noti_list;
 }
 
+static gboolean call_noti_cb(gpointer data)
+{
+	struct cbs_queue_item *item;
+
+	g_async_queue_lock(cbs_queue);
+	item = g_async_queue_try_pop_unlocked(cbs_queue);
+	while (item) {
+		g_async_queue_unlock(cbs_queue);
+		item->cb(item->node, item->user_data);
+		g_async_queue_lock(cbs_queue);
+		free_cbs(item);
+		item = g_async_queue_try_pop_unlocked(cbs_queue);
+	}
+	g_async_queue_unlock(cbs_queue);
+
+	return G_SOURCE_REMOVE;
+}
+
 static void notify_cb(const struct buxton_layer *layer, const char *key,
 		const struct buxton_value *val, void *user_data)
 {
 	struct noti *noti = user_data;
-	keynode_t *node;
 	GList *l;
 	GList *copy;
 
 	assert(noti);
-
-	node = calloc(1, sizeof(*node));
-	if (!node)
-		return;
-
-	node->keyname = (char *)key;
-	to_vconf_t(val, node);
-
 	copy = copy_noti_list(noti->noti_list);
 
+	g_async_queue_lock(cbs_queue);
 	for (l = copy; l; l = g_list_next(l)) {
 		struct noti_cb *noticb = l->data;
+		struct cbs_queue_item *item;
+		keynode_t *node;
+
+		item = calloc(1, sizeof(*item));
+		if (!item)
+			continue;
+		node = calloc(1, sizeof(*node));
+		if (!node) {
+			free(item);
+			continue;
+		}
+
+		node->keyname = strdup(key);
+		to_vconf_t(val, node);
+
+		item->node = node;
+		item->cb = noticb->cb;
+		item->user_data = noticb->user_data;
 
 		assert(noticb->cb);
-		noticb->cb(node, noticb->user_data);
+		g_async_queue_push_unlocked(cbs_queue, item);
 	}
+	g_async_queue_unlock(cbs_queue);
 
 	noti->noti_list = free_copy_list(noti->noti_list, copy);
 
-	free(node);
+	g_idle_add(call_noti_cb, NULL);
 }
 
 static struct noti_cb *find_noti_cb(struct noti *noti, vconf_callback_fn cb)
@@ -884,18 +948,6 @@ struct _keylist_t {
 EXPORT keylist_t *vconf_keylist_new(void)
 {
 	return calloc(1, sizeof(struct _keylist_t));
-}
-
-static void free_keynode(struct _keynode_t *keynode)
-{
-	if (!keynode)
-		return;
-
-	if (keynode->type == VCONF_TYPE_STRING)
-		free(keynode->value.s);
-
-	free(keynode->keyname);
-	free(keynode);
 }
 
 EXPORT int vconf_keylist_free(keylist_t *keylist)
