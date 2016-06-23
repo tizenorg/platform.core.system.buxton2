@@ -42,6 +42,7 @@ static struct buxton_client *noti_client;
 static struct buxton_layer *system_layer;
 static struct buxton_layer *memory_layer;
 static GHashTable *noti_tbl;
+static GAsyncQueue *cbs_queue;
 
 struct noti {
 	char *key;
@@ -54,7 +55,25 @@ struct noti_cb {
 	int ref_cnt;
 };
 
+struct cbs_queue_item {
+	keynode_t *node;
+	vconf_callback_fn cb;
+	void *user_data;
+};
+
 static bool last_result;
+
+static void free_keynode(struct _keynode_t *keynode)
+{
+	if (!keynode)
+		return;
+
+	if (keynode->type == VCONF_TYPE_STRING)
+		free(keynode->value.s);
+
+	free(keynode->keyname);
+	free(keynode);
+}
 
 EXPORT char *vconf_keynode_get_name(keynode_t *keynode)
 {
@@ -165,6 +184,12 @@ static void free_noti(struct noti *noti)
 	free(noti);
 }
 
+static void free_cbs(struct cbs_queue_item *item)
+{
+	free_keynode(item->node);
+	free(item);
+}
+
 static void _close_for_noti(void)
 {
 	pthread_mutex_lock(&vconf_lock);
@@ -183,6 +208,8 @@ static void _close_for_noti(void)
 
 	g_hash_table_destroy(noti_tbl);
 	noti_tbl = NULL;
+
+	g_async_queue_unref(cbs_queue);
 
 	buxton_close(noti_client);
 	noti_client = NULL;
@@ -215,6 +242,8 @@ static int _open_for_noti(void)
 	system_layer = buxton_create_layer("system");
 	memory_layer = buxton_create_layer("memory");
 
+	cbs_queue = g_async_queue_new_full((GDestroyNotify)free_cbs);
+
 	pthread_mutex_unlock(&vconf_lock);
 	return 0;
 }
@@ -242,59 +271,6 @@ static int _open(const char *key, struct buxton_client **client,
 		*layer = buxton_create_layer("system");
 
 	return 0;
-}
-
-static void to_vconf_t(const struct buxton_value *val, keynode_t *node)
-{
-	int r;
-	enum buxton_key_type type;
-	uint32_t u;
-	int64_t i64;
-	uint64_t u64;
-
-	assert(val);
-	assert(node);
-
-	r = buxton_value_get_type(val, &type);
-	if (r == -1)
-		type = BUXTON_TYPE_UNKNOWN;
-
-	switch (type) {
-	case BUXTON_TYPE_STRING:
-		node->type = VCONF_TYPE_STRING;
-		buxton_value_get_string(val, (const char **)&node->value.s);
-		break;
-	case BUXTON_TYPE_INT32:
-		node->type = VCONF_TYPE_INT;
-		buxton_value_get_int32(val, &node->value.i);
-		break;
-	case BUXTON_TYPE_UINT32:
-		node->type = VCONF_TYPE_INT;
-		buxton_value_get_uint32(val, &u);
-		node->value.i = (int)u;
-		break;
-	case BUXTON_TYPE_INT64:
-		node->type = VCONF_TYPE_INT;
-		buxton_value_get_int64(val, &i64);
-		node->value.i = (int)i64;
-		break;
-	case BUXTON_TYPE_UINT64:
-		node->type = VCONF_TYPE_INT;
-		buxton_value_get_uint64(val, &u64);
-		node->value.i = (int)u64;
-		break;
-	case BUXTON_TYPE_DOUBLE:
-		node->type = VCONF_TYPE_DOUBLE;
-		buxton_value_get_double(val, &node->value.d);
-		break;
-	case BUXTON_TYPE_BOOLEAN:
-		node->type = VCONF_TYPE_BOOL;
-		buxton_value_get_boolean(val, &node->value.b);
-		break;
-	default:
-		node->type = VCONF_TYPE_NONE;
-		break;
-	}
 }
 
 static GList *copy_noti_list(GList *noti_list)
@@ -339,35 +315,109 @@ static GList *free_copy_list(GList *noti_list, GList *copy_list)
 	return noti_list;
 }
 
+static gboolean call_noti_cb(gpointer data)
+{
+	struct cbs_queue_item *item;
+
+	g_async_queue_lock(cbs_queue);
+	item = g_async_queue_try_pop_unlocked(cbs_queue);
+	while (item) {
+		g_async_queue_unlock(cbs_queue);
+		item->cb(item->node, item->user_data);
+		free_cbs(item);
+		g_async_queue_lock(cbs_queue);
+		item = g_async_queue_try_pop_unlocked(cbs_queue);
+	}
+	g_async_queue_unlock(cbs_queue);
+
+	return G_SOURCE_REMOVE;
+}
+
+static int set_keynode_value(struct buxton_value *v, struct _keynode_t *keynode)
+{
+	int r;
+	enum buxton_key_type t;
+	const char *s;
+
+	assert(v);
+	assert(keynode);
+
+	r = buxton_value_get_type(v, &t);
+	if (r == -1)
+		t = BUXTON_TYPE_UNKNOWN;
+
+	switch (t) {
+	case BUXTON_TYPE_INT32:
+		keynode->type = VCONF_TYPE_INT;
+		r = buxton_value_get_int32(v, &keynode->value.i);
+		break;
+	case BUXTON_TYPE_BOOLEAN:
+		keynode->type = VCONF_TYPE_BOOL;
+		r = buxton_value_get_boolean(v, &keynode->value.b);
+		break;
+	case BUXTON_TYPE_DOUBLE:
+		keynode->type = VCONF_TYPE_DOUBLE;
+		r = buxton_value_get_double(v, &keynode->value.d);
+		break;
+	case BUXTON_TYPE_STRING:
+		keynode->type = VCONF_TYPE_STRING;
+		r = buxton_value_get_string(v, &s);
+		if (r != -1) {
+			if (s) {
+				keynode->value.s = strdup(s);
+				if (!keynode->value.s)
+					r = -1;
+			}
+		}
+		break;
+	default:
+		LOGE("set keynode: unsupported key type %d", t);
+		r = 0; /* ignore error */
+		break;
+	}
+
+	return r;
+}
+
+
 static void notify_cb(const struct buxton_layer *layer, const char *key,
 		const struct buxton_value *val, void *user_data)
 {
 	struct noti *noti = user_data;
-	keynode_t *node;
 	GList *l;
 	GList *copy;
 
 	assert(noti);
-
-	node = calloc(1, sizeof(*node));
-	if (!node)
-		return;
-
-	node->keyname = (char *)key;
-	to_vconf_t(val, node);
-
 	copy = copy_noti_list(noti->noti_list);
 
+	g_async_queue_lock(cbs_queue);
 	for (l = copy; l; l = g_list_next(l)) {
 		struct noti_cb *noticb = l->data;
+		struct cbs_queue_item *item;
+		keynode_t *node;
+
+		item = calloc(1, sizeof(*item));
+		if (!item)
+			return;
+		node = calloc(1, sizeof(*node));
+		if (!node)
+			return;
+
+		node->keyname = strdup(key);
+		set_keynode_value((struct buxton_value *)val, node);
+
+		item->node = node;
+		item->cb = noticb->cb;
+		item->user_data = noticb->user_data;
 
 		assert(noticb->cb);
-		noticb->cb(node, noticb->user_data);
+		g_async_queue_push_unlocked(cbs_queue, item);
 	}
+	g_async_queue_unlock(cbs_queue);
 
 	noti->noti_list = free_copy_list(noti->noti_list, copy);
 
-	free(node);
+	g_idle_add(call_noti_cb, NULL);
 }
 
 static struct noti_cb *find_noti_cb(struct noti *noti, vconf_callback_fn cb)
@@ -886,18 +936,6 @@ EXPORT keylist_t *vconf_keylist_new(void)
 	return calloc(1, sizeof(struct _keylist_t));
 }
 
-static void free_keynode(struct _keynode_t *keynode)
-{
-	if (!keynode)
-		return;
-
-	if (keynode->type == VCONF_TYPE_STRING)
-		free(keynode->value.s);
-
-	free(keynode->keyname);
-	free(keynode);
-}
-
 EXPORT int vconf_keylist_free(keylist_t *keylist)
 {
 	if (!keylist) {
@@ -1135,52 +1173,6 @@ EXPORT int vconf_keylist_rewind(keylist_t *keylist)
 	keylist->cursor = l;
 
 	return 0;
-}
-
-static int set_keynode_value(struct buxton_value *v, struct _keynode_t *keynode)
-{
-	int r;
-	enum buxton_key_type t;
-	const char *s;
-
-	assert(v);
-	assert(keynode);
-
-	r = buxton_value_get_type(v, &t);
-	if (r == -1)
-		t = BUXTON_TYPE_UNKNOWN;
-
-	switch (t) {
-	case BUXTON_TYPE_INT32:
-		keynode->type = VCONF_TYPE_INT;
-		r = buxton_value_get_int32(v, &keynode->value.i);
-		break;
-	case BUXTON_TYPE_BOOLEAN:
-		keynode->type = VCONF_TYPE_BOOL;
-		r = buxton_value_get_boolean(v, &keynode->value.b);
-		break;
-	case BUXTON_TYPE_DOUBLE:
-		keynode->type = VCONF_TYPE_DOUBLE;
-		r = buxton_value_get_double(v, &keynode->value.d);
-		break;
-	case BUXTON_TYPE_STRING:
-		keynode->type = VCONF_TYPE_STRING;
-		r = buxton_value_get_string(v, &s);
-		if (r != -1) {
-			if (s) {
-				keynode->value.s = strdup(s);
-				if (!keynode->value.s)
-					r = -1;
-			}
-		}
-		break;
-	default:
-		LOGE("set keynode: unsupported key type %d", t);
-		r = 0; /* ignore error */
-		break;
-	}
-
-	return r;
 }
 
 static struct _keynode_t *alloc_keynode(struct buxton_client *client,
