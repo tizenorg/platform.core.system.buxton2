@@ -1995,6 +1995,8 @@ EXPORT int buxton_enable_security_sync(struct buxton_client *client)
 	struct bxt_req *req;
 	struct response resp;
 
+	memset(&resp, 0, sizeof(resp));
+
 	req = security_control(client, TRUE, security_sync_cb, &resp);
 	if (!req)
 		return -1;
@@ -2028,6 +2030,8 @@ EXPORT int buxton_disable_security_sync(struct buxton_client *client)
 	int r;
 	struct bxt_req *req;
 	struct response resp;
+
+	memset(&resp, 0, sizeof(resp));
 
 	req = security_control(client, FALSE, security_sync_cb, &resp);
 	if (!req)
