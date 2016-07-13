@@ -55,12 +55,6 @@ struct noti_cb {
 	int ref_cnt;
 };
 
-struct cbs_queue_item {
-	keynode_t *node;
-	vconf_callback_fn cb;
-	void *user_data;
-};
-
 static bool last_result;
 
 static void free_keynode(struct _keynode_t *keynode)
@@ -185,12 +179,6 @@ static void free_noti(struct noti *noti)
 	free(noti);
 }
 
-static void free_cbs(struct cbs_queue_item *item)
-{
-	free_keynode(item->node);
-	free(item);
-}
-
 static void _close_for_noti(void)
 {
 	pthread_mutex_lock(&vconf_lock);
@@ -209,8 +197,6 @@ static void _close_for_noti(void)
 
 	g_hash_table_destroy(noti_tbl);
 	noti_tbl = NULL;
-
-	g_async_queue_unref(cbs_queue);
 
 	buxton_close(noti_client);
 	noti_client = NULL;
@@ -242,8 +228,6 @@ static int _open_for_noti(void)
 
 	system_layer = buxton_create_layer("system");
 	memory_layer = buxton_create_layer("memory");
-
-	cbs_queue = g_async_queue_new_full((GDestroyNotify)free_cbs);
 
 	pthread_mutex_unlock(&vconf_lock);
 	return 0;
@@ -374,66 +358,6 @@ static GList *free_copy_list(GList *noti_list, GList *copy_list)
 	return noti_list;
 }
 
-static gboolean call_noti_cb(gpointer data)
-{
-	struct cbs_queue_item *item;
-
-	g_async_queue_lock(cbs_queue);
-	item = g_async_queue_try_pop_unlocked(cbs_queue);
-	while (item) {
-		g_async_queue_unlock(cbs_queue);
-		item->cb(item->node, item->user_data);
-		g_async_queue_lock(cbs_queue);
-		free_cbs(item);
-		item = g_async_queue_try_pop_unlocked(cbs_queue);
-	}
-	g_async_queue_unlock(cbs_queue);
-
-	return G_SOURCE_REMOVE;
-}
-
-static void notify_cb(const struct buxton_layer *layer, const char *key,
-		const struct buxton_value *val, void *user_data)
-{
-	struct noti *noti = user_data;
-	GList *l;
-	GList *copy;
-
-	assert(noti);
-	copy = copy_noti_list(noti->noti_list);
-
-	g_async_queue_lock(cbs_queue);
-	for (l = copy; l; l = g_list_next(l)) {
-		struct noti_cb *noticb = l->data;
-		struct cbs_queue_item *item;
-		keynode_t *node;
-
-		item = calloc(1, sizeof(*item));
-		if (!item)
-			continue;
-		node = calloc(1, sizeof(*node));
-		if (!node) {
-			free(item);
-			continue;
-		}
-
-		node->keyname = strdup(key);
-		to_vconf_t(val, node);
-
-		item->node = node;
-		item->cb = noticb->cb;
-		item->user_data = noticb->user_data;
-
-		assert(noticb->cb);
-		g_async_queue_push_unlocked(cbs_queue, item);
-	}
-	g_async_queue_unlock(cbs_queue);
-
-	noti->noti_list = free_copy_list(noti->noti_list, copy);
-
-	g_idle_add(call_noti_cb, NULL);
-}
-
 static struct noti_cb *find_noti_cb(struct noti *noti, vconf_callback_fn cb)
 {
 	GList *l;
@@ -451,6 +375,51 @@ static struct noti_cb *find_noti_cb(struct noti *noti, vconf_callback_fn cb)
 	return NULL;
 }
 
+static gboolean call_noti_cb(gpointer data)
+{
+	keynode_t *node = (keynode_t *)data;
+	struct noti *noti;
+	GList *l;
+	GList *copy;
+
+	pthread_mutex_lock(&vconf_lock);
+	noti = g_hash_table_lookup(noti_tbl, node->keyname);
+	if (!noti) {
+		pthread_mutex_unlock(&vconf_lock);
+		return G_SOURCE_REMOVE;
+	}
+	pthread_mutex_unlock(&vconf_lock);
+
+	copy = copy_noti_list(noti->noti_list);
+
+	for (l = copy; l; l = g_list_next(l)) {
+		struct noti_cb *noticb = l->data;
+
+		assert(noticb->cb);
+		noticb->cb(node, noticb->user_data);
+	}
+
+	noti->noti_list = free_copy_list(noti->noti_list, copy);
+
+	free_keynode(node);
+
+	return G_SOURCE_REMOVE;
+}
+
+static void notify_cb(const struct buxton_layer *layer, const char *key,
+		const struct buxton_value *val, void *user_data)
+{
+	keynode_t *node;
+
+	node = calloc(1, sizeof(*node));
+	if (!node)
+		return;
+
+	node->keyname = strdup(key);
+	to_vconf_t(val, node);
+
+	g_idle_add(call_noti_cb, node);
+}
 
 static int add_noti(struct noti *noti, vconf_callback_fn cb, void *user_data)
 {
@@ -535,7 +504,7 @@ EXPORT int vconf_notify_key_changed(const char *key, vconf_callback_fn cb,
 			return -1;
 		}
 		r = buxton_register_notification_sync(noti_client, get_layer(key), key,
-				notify_cb, noti);
+				notify_cb, NULL);
 		if (r == -1) {
 			LOGE("vconf_notify_key_changed: key '%s' add notify error %d",
 					key, errno);
