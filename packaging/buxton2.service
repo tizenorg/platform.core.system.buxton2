@@ -3,6 +3,7 @@ Description=Buxton2 Configuration Service
 After=systemd-tmpfiles-setup.service
 
 [Service]
+SmackProcessLabel=System
 ExecStart=/usr/sbin/buxton2d -f
 User=buxton
 Group=buxton
