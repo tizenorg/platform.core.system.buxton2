@@ -1,7 +1,7 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 2.6)
 PROJECT(buxton2 C)
 
-# check variables
+# check variables~
 IF(NOT DEFINED VERSION)
 	MESSAGE(FATAL_ERROR "VERSION is not defined")
 ENDIF()
